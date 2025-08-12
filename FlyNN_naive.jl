@@ -1,11 +1,9 @@
-include("FlyHash.jl")
+include("FlyHashNaive.jl")
 using LinearAlgebra, .Threads
 
 function flynn_train_naive(X::AbstractMatrix, y::AbstractVector, m::Int, ρ::Real, s::Int, γ::Real, seed::Int)
     d, n = size(X)
     
-    # 1. Mappatura robusta delle classi a indici interi (1, 2, ..., l)
-    # Questo rende il codice funzionante anche con etichette non numeriche o non sequenziali
     unique_classes = unique(y)
     l = length(unique_classes)
     class_map = Dict(label => i for (i, label) in enumerate(unique_classes))
@@ -31,7 +29,7 @@ function flynn_infer(X,M,ρ,W)
     
     n = size(fX,2)
     
-    min_bf_scores = mapslices(minimum, fX; dims=1)[:]  # vettore con min per riga
+    min_bf_scores = mapslices(minimum, fX; dims=1)[:]
     
     y_pred = Vector{eltype(y)}()
     nties = 0
