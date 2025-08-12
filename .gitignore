@@ -1,0 +1,33 @@
+# ── File generati automaticamente ──
+# Manifest non incluso nei pacchetti di libreria
+/Manifest.toml
+
+# Cache di precompilazione Julia
+*.ji
+
+# File temporanei di profiling e coverage
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+*.jl.*.mem
+*.jl.gcov
+*.jl.*.gcov
+
+# Artefatti di build locali
+deps/build.log
+deps/deps.jl
+
+# ── Configurazioni IDE/editor ──
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ── File temporanei di sistema ──
+.DS_Store
+Thumbs.db
+*~
+
+# ── Checkpoints o export notebook ──
+.ipynb_checkpoints/
+*.jl.html
