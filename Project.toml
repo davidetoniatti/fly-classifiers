@@ -1,7 +1,16 @@
+name = "FlyNN"
+uuid = "87f929f6-1c70-4c8c-9b04-ad225bbb75ed"
+authors = ["Davide Toniatti <davide.toniatti@students.uniroma2.eu>"]
+version = "0.1.0"
+
 [deps]
-FlyNN = "87f929f6-1c70-4c8c-9b04-ad225bbb75ed"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
-StatisticalMeasures = "a19d573c-0a75-4610-95b3-7071388c7541"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+
+[compat]
+LinearAlgebra = "1.11.0"
+Random = "1.11.0"
+SparseArrays = "1.11.0"
+StatsBase = "0.34.6"

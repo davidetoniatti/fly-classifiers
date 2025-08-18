@@ -9,11 +9,12 @@ using .Threads
 
 # Files inclusion
 include("types.jl")
-include("FlyHash.jl")
+include("FlyHashFast.jl")
 include("training.jl")
 include("inference.jl")
+include("utils.jl")
 
 # Export of public types and functions
 export FNN, fit, predict
 
-end
+end # module
