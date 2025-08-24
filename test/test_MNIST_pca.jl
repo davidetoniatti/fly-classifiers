@@ -35,9 +35,9 @@ s = 5
 ρ = 128
 γ = 0.8
 
-model = FlyNN.fit(X_train,y_train,m,ρ,s,γ,seed)
-y_pred = FlyNN.predict(X_test, model);
+model = FliesClassifiers.fit(FlyNN, X_train,y_train,m,ρ,s,γ,seed)
+y_pred = FliesClassifiers.predict(model, X_test);
 
-@btime FlyNN.fit(X_train,y_train,m,ρ,s,γ,seed)
+#@btime FlyNN.fit(X_train,y_train,m,ρ,s,γ,seed)
 #@profview fit(X_train,y_train,m,ρ,s,γ,seed)
 # @btime predict(X_test, model);
