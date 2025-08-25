@@ -58,10 +58,10 @@ projections.
 # Arguments
 - `X::AbstractMatrix`: Input matrix (d x n).
 - `M::SparseMatrixCSC`: Random projection matrix (m x d).
-- `ρ::Int`: Number of active hashes per column (the "top-ρ").
+- `ρ::Int`: Number of nonzeros per column (the "top-ρ").
 
 # Returns
-- `SparseMatrixCSC{Bool, Int}`: The sparse hash matrix (m x n).
+- `SparseMatrixCSC{Bool, Int}`: The sparse FlyHash matrix (m x n).
 """
 function fly_hash(X::AbstractMatrix, M::SparseMatrixCSC{Bool,Int}, ρ::Int)
     d_X, n = size(X)
@@ -157,21 +157,22 @@ end
 
 """
     fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, ρ::Int, s::Int,
-    γ::Real, seed::Int) -> FNN
+    γ::Real, seed::Int) -> FlyNN
 
 Trains the FlyNN classifier.
 
 # Arguments
+- `::Type{FlyNN}`: The model to be fitted.
 - `X::AbstractMatrix`: Training data matrix (d x n).
 - `y::AbstractVector`: Training labels (n-element vector).
-- `m::Int`: The dimension of the hash space.
-- `ρ::Int`: The number of active hashes per item.
-- `s::Int`: The number of non-zero elements per row in the projection matrix.
+- `m::Int`: The dimension of the projection space.
+- `ρ::Int`: The number of nonzeros in the FlyHash.
+- `s::Int`: The number of nonzeros per column in the projection matrix.
 - `γ::Real`: The learning rate parameter.
 - `seed::Int`: Random seed for reproducibility.
 
 # Returns
-- `FNN`: The trained model containing the projection matrix, weights,
+- `FlyNN`: The trained model containing the projection matrix, weights,
 and class map.
 """
 function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, ρ::Int, s::Int, γ::Real, seed::Int)
@@ -223,12 +224,12 @@ Performs inference on new data using a trained FlyNN model.
 
 # Arguments
 - `model::FlyNN`: The trained FlyNN model object.
-- `X::AbstractMatrix`: The test data matrix (d x n).
+- `X::AbstractMatrix`: The data matrix (d x n).
 
 # Returns
 - `Vector`: A vector of predicted labels for each column in `X`.
 """
-function predict(model::FlyNN, X::AbstractMatrix )
+function predict(model::FlyNN, X::AbstractMatrix)
     H = fly_hash(X, model.M, model.ρ)
 
     fX = model.W * H

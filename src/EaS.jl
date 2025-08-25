@@ -1,24 +1,62 @@
-function random_projection_matrix(m::Int, d::Int; seed::Int = 42)
-    Random.seed!(seed)
-    mat = randn(m, d)
-    
-    norms = sqrt.(sum(mat.^2, dims=2))
-    
-    # Add a small constant (epsilon) to avoid division by zero
-    # in case a row has zero norm.
-    norms .+= eps()
-    
-    P = mat ./ norms
+"""
+    rupm(m::Int, d::Int, seed::Int) ->
+    Matrix{Float64}
 
-    return P
+Creates a random projection matrix of size `m x d`, whose row are sampled
+i.i.d. from the uniform distribution over S^{d-1}.
+
+# Arguments
+- `m::Int`: Number of rows.
+- `d::Int`: Number of columns.
+- `seed::Int`: Seed for initializing the random number generators.
+
+# Returns
+- `Matrix{Float64}`: The generated projection matrix.
+"""
+function rupm(m::Int, d::Int; seed::Int = 42)
+    rng = MersenneTwister(seed)
+    mat = randn(rng, m, d)
+    
+    # Normalize each row in-place to have unit L2 norm.
+    @inbounds for i in 1:m
+        # Get a view of the current row to avoid copying data.
+        row_view = @view mat[i, :]
+        
+        # Calculate the norm of the row.
+        row_norm = norm(row_view)
+        
+        # Normalize the row. Add a small epsilon for numerical stability.
+        # This prevents division by zero if a row happens to be all zeros.
+        mat[i, :] ./= (row_norm + eps(eltype(mat)))
+    end
+
+    return mat
 end
 
+
+"""
+    fit(::Type{EaS}, X::AbstractMatrix, y::AbstractVector, m::Int, k::Int,
+    seed::Int) -> EaS
+
+Trains the EaS classifier.
+
+# Arguments
+- `::Type{EaS}`: The model to be fitted.
+- `X::AbstractMatrix`: Training data matrix (d x n).
+- `y::AbstractVector`: Training labels (n-element vector).
+- `m::Int`: The dimension of the projection space.
+- `k::Int`: The number of active response regions per item.
+- `seed::Int`: Random seed for reproducibility.
+
+# Returns
+- `EaS`: The trained model containing the projection matrix and weights.
+"""
 function fit(::Type{EaS}, X::AbstractMatrix{T}, y::AbstractVector, m::Int, k::Int, seed::Int) where T
     d, n = size(X)
     @assert length(y) == n "Number of labels does not match number of data points."
     
     # Compute random projection matrix
-    P = random_projection_matrix(m,d; seed)
+    P = rupm(m,d; seed)
 
     # Determine the computation type based on the element types of X and M.
     T_proj = promote_type(T, eltype(P))
@@ -62,6 +100,18 @@ function fit(::Type{EaS}, X::AbstractMatrix{T}, y::AbstractVector, m::Int, k::In
     return EaS(P, w_normalized, ct_total, k)
 end
 
+"""
+    predict(model::EaS, X::AbstractMatrix) -> Vector
+
+Performs inference on new data using a trained EaS model.
+
+# Arguments
+- `model::EaS`: The trained EaS model object.
+- `X::AbstractMatrix`: The data matrix (d x n).
+
+# Returns
+- `Vector`: A vector of scores for each column in `X`.
+"""
 function predict(model::EaS, X::AbstractMatrix{T}) where T
     n = size(X, 2)
     m = length(model.w)
