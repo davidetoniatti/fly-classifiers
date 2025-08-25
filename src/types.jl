@@ -14,7 +14,8 @@ end
 
 struct EaS <: AbstractFliesClassifier
     P::Matrix{Float64}
-    w::Vector{Float64}
+    W::Matrix{Float64}
     ct::Vector{Int64}
     k::Int
+    class_labels::Vector
 end

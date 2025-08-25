@@ -54,6 +54,12 @@ Trains the EaS classifier.
 function fit(::Type{EaS}, X::AbstractMatrix{T}, y::AbstractVector, m::Int, k::Int, seed::Int) where T
     d, n = size(X)
     @assert length(y) == n "Number of labels does not match number of data points."
+
+    # Robust mapping of class labels to integer indices (1, 2, ..., l).
+    # This makes the code work with non-numeric or non-sequential labels.
+    class_labels = unique(y)
+    l = length(class_labels)
+    class_map = Dict(label => i for (i, label) in enumerate(class_labels))
     
     # Compute random projection matrix
     P = rupm(m,d; seed)
@@ -63,7 +69,7 @@ function fit(::Type{EaS}, X::AbstractMatrix{T}, y::AbstractVector, m::Int, k::In
 
     # Safe parallelization with thread-local storage for weights and counters
     # We initialize a weight and counter vector for each thread to prevent race conditions.
-    w_local  = [zeros(Int, m) for _ in 1:nthreads()]
+    W_local  = [zeros(Int, l, m) for _ in 1:nthreads()]
     ct_local = [zeros(Int, m) for _ in 1:nthreads()]
     x_proj_local = [Vector{T_proj}(undef, m) for _ in 1:Threads.nthreads()]
     top_idxs_local = [Vector{Int}(undef, k) for _ in 1:nthreads()]
@@ -72,7 +78,7 @@ function fit(::Type{EaS}, X::AbstractMatrix{T}, y::AbstractVector, m::Int, k::In
     @threads for i in 1:n
         tid = threadid()
         
-        w = w_local[tid]
+        W = W_local[tid]
         ct = ct_local[tid]
         x_proj = x_proj_local[tid]
         top_idxs = top_idxs_local[tid]
@@ -82,22 +88,24 @@ function fit(::Type{EaS}, X::AbstractMatrix{T}, y::AbstractVector, m::Int, k::In
         mul!(x_proj, P, x_view)
         _topk_indices!(top_idxs, top_vals, x_proj, k)
 
-        label = y[i]
+        class_idx = class_map[y[i]]
         @inbounds for j in top_idxs
-            w[j] += label
+            W[class_idx, j] += 1
             ct[j] += 1
         end
     end
     
-    w_total  = reduce(+, w_local)
+    W_total  = reduce(+, W_local)
     ct_total = reduce(+, ct_local)
     
-    w_normalized = zeros(Float64, m)
+    W_normalized = zeros(Float64, l, m)
     valid_indices = ct_total .> 0
-    
-    @inbounds w_normalized[valid_indices] .= w_total[valid_indices] ./ ct_total[valid_indices]
+   
+    @inbounds for c in 1:l
+        W_normalized[c, valid_indices] .= W_total[c, valid_indices] ./ ct_total[valid_indices] 
+    end
 
-    return EaS(P, w_normalized, ct_total, k)
+    return EaS(P, W_normalized, ct_total, k, class_labels)
 end
 
 """
@@ -114,14 +122,17 @@ Performs inference on new data using a trained EaS model.
 """
 function predict(model::EaS, X::AbstractMatrix{T}) where T
     n = size(X, 2)
-    m = length(model.w)
-    scores = zeros(n)
+    l, m = size(model.W)
+    #scores = zeros(n)
+
+    y_pred = Vector{eltype(model.class_labels)}(undef, n)
 
     T_proj = promote_type(T, eltype(model.P))
 
     x_proj_local = [Vector{T_proj}(undef, m) for _ in 1:Threads.nthreads()]
     top_idxs_local = [Vector{Int}(undef, model.k) for _ in 1:nthreads()]
     top_vals_local = [Vector{T_proj}(undef, model.k) for _ in 1:nthreads()]
+    class_scores_local = [Vector{eltype(model.W)}(undef, l) for _ in 1:nthreads()]
 
     @threads for i in 1:n
         tid = threadid()
@@ -129,14 +140,22 @@ function predict(model::EaS, X::AbstractMatrix{T}) where T
         x_proj = x_proj_local[tid]
         top_idxs = top_idxs_local[tid]
         top_vals = top_vals_local[tid]
+        class_scores = class_scores_local[tid]
 
         x_view = @view X[:, i]
         mul!(x_proj, model.P, x_view)
         _topk_indices!(top_idxs, top_vals, x_proj, model.k)
+        
+        fill!(class_scores, 0)
+        active_weights = @view model.W[:, top_idxs]
+        
+        sum!(class_scores, active_weights)
+        
+        winner_idx = argmax(class_scores)
 
         # qui non dovrebbero esserci problemi di race conditions
-        @inbounds scores[i] = sum(@view model.w[top_idxs]) / model.k
+        @inbounds y_pred[i] = model.class_labels[winner_idx]
     end
 
-    return scores
+    return y_pred
 end
