@@ -1,144 +1,74 @@
-using Random
-using Printf
-using Statistics
-using MLUtils
+using MLUtils: flatten
+using MLDatasets, StatsBase, MultivariateStats
 
-function kfold_cross_validation(X::AbstractMatrix, y::AbstractVector, k::Int, m::Int, ρ::Int, s::Int, γ::Real, seed::Int)
-    # Set seed
-    Random.seed!(seed)
-    
-    accuracies = Float64[]
-    
-    folds = kfolds((X, y), k=k)
+include("grid_search.jl")
 
-    for (i, (train_data, test_data)) in enumerate(folds)
-        X_train, y_train = train_data
-        X_test, y_test = test_data
-        
-        # Training and prediction
-        model = FlyNN.fit(X_train, y_train, m, ρ, s, γ, seed + i)
-        y_pred = FlyNN.predict(X_test, model)
-        
-        # Compute accuracy
-        accuracy = sum(y_pred .== y_test) / length(y_test)
-        push!(accuracies, accuracy)
-    end
-    
-    return mean(accuracies)
-end
+# Data Preparation
+X, y = MNIST()[:]
+X= flatten(X)
+
+# Standardization
+dt = StatsBase.fit(ZScoreTransform, X; dims=1)
+X= StatsBase.transform(dt, X)
+
+# PCA
+M = MultivariateStats.fit(PCA, X; maxoutdim=20)
+X= MultivariateStats.predict(M, X)
+
+seed = 42
+k_folds = 5
+
+d, n = size(X)
 
 
-function update_best_params!(best_params::Dict, accuracy::Float64, current_params::Dict)
-    if accuracy > best_params[:accuracy]
-        best_params[:accuracy] = accuracy
-        merge!(best_params, current_params)
-        return true
-    end
-    return false
-end
+#-- EAS HP TUNING --#
+eas_param_grid = Dict{Symbol, Vector}(
+    :m => round.(Int, exp.(range(log(64d), stop=log(4096d), length=10))),
+    :k => [8, 64, 128, 256]
+)
 
-function tune_m(X, y, k, s_ratio, ρ, γ, seed, best_params)
-    println("Tuning 'm' with s/d=$s_ratio, ρ=$ρ, γ=$γ")
-    d = size(X, 1)
-    s = round(Int, s_ratio * d)
-    
-    m_values = round.(Int, exp.(range(log(4d), stop=log(4096d), length=10)))
-    
-    for m in m_values
-        accuracy = kfold_cross_validation(X, y, k, m, ρ, s, γ, seed)
-        @printf "  m = %-6d -> Accuracy: %.4f\n" m accuracy
-        
-        current_params = Dict(:m => m, :s_ratio => s_ratio, :s => s, :ρ => ρ, :γ => γ)
-        update_best_params!(best_params, accuracy, current_params)
-    end
-end
-
-function tune_s_ratio(X, y, k, m, ρ, γ, seed, best_params)
-    println("Tuning 's/d' with m=$m, ρ=$ρ, γ=$γ")
-    d = size(X, 1)
-    
-    s_ratio_values = range(0.1, stop=0.8, length=10)
-    
-    for s_ratio in s_ratio_values
-        s = max(1, round(Int, s_ratio * d))
-        accuracy = kfold_cross_validation(X, y, k, m, ρ, s, γ, seed)
-        @printf "  s/d = %.2f (s=%d) -> Accuracy: %.4f\n" s_ratio s accuracy
-        
-        current_params = Dict(:m => m, :s_ratio => s_ratio, :s => s, :ρ => ρ, :γ => γ)
-        update_best_params!(best_params, accuracy, current_params)
-    end
-end
-
-function tune_rho(X, y, k, m, s_ratio, γ, seed, best_params)
-    println("Tuning 'ρ' with m=$m, s/d=$s_ratio, γ=$γ")
-    d = size(X, 1)
-    s = round(Int, s_ratio * d)
-    
-    rho_values = unique(round.(Int, exp.(range(log(4), stop=log(256), length=10))))
-    
-    for ρ in rho_values
-        accuracy = kfold_cross_validation(X, y, k, m, ρ, s, γ, seed)
-        @printf "  ρ = %-4d -> Accuracy: %.4f\n" ρ accuracy
-
-        current_params = Dict(:m => m, :s_ratio => s_ratio, :s => s, :ρ => ρ, :γ => γ)
-        update_best_params!(best_params, accuracy, current_params)
-    end
-end
-
-function tune_gamma(X, y, k, m, s_ratio, ρ, seed, best_params)
-    println("Tuning 'γ' with m=$m, s/d=$s_ratio, ρ=$ρ")
-    d = size(X, 1)
-    s = round(Int, s_ratio * d)
-    
-    gamma_values = range(0.1, stop=0.8, length=10)
-    
-    for γ in gamma_values
-        accuracy = kfold_cross_validation(X, y, k, m, ρ, s, γ, seed)
-        @printf "  γ = %.2f -> Accuracy: %.4f\n" γ accuracy
-        
-        current_params = Dict(:m => m, :s_ratio => s_ratio, :s => s, :ρ => ρ, :γ => γ)
-        update_best_params!(best_params, accuracy, current_params)
-    end
-end
+best_eas_params = grid_search(EaS, X, y, k_folds, seed, eas_param_grid, "data/results_eas.csv")
 
 
-function run_full_search(X::AbstractMatrix, y::AbstractVector, k::Int, seed::Int=123)
-    println("--- HYPERPARAMETER SEARCH FLYNN ---")
-    
-    best_params = Dict{Symbol, Any}(:accuracy => -1.0)
-    
-    println("\n====================== HP 'm' ======================")
-    for s_ratio in [0.1, 0.3], ρ in [8, 32], γ in [0.1, 0.5]
-        tune_m(X, y, k, s_ratio, ρ, γ, seed, best_params)
-        println("-"^40)
-    end
+#-- FLYNN HP TUNING --#
+flynn_grid_m = Dict{Symbol, Vector}(
+    :m       => unique(round.(Int, exp.(range(log(4d), stop=log(4096d), length=10)))),
+    :s_ratio => [0.1, 0.3],
+    :ρ       => [8, 32],
+    :γ       => [0.0, 0.5]
+)
 
-    println("\n====================== HP 's/d' ======================")
-    for m in [256, 1024], ρ in [8, 32], γ in [0.1, 0.5]
-        tune_s_ratio(X, y, k, m, ρ, γ, seed, best_params)
-        println("-"^40)
-    end
+flynn_grid_s_ratio = Dict{Symbol, Vector}(
+    :m       => [256d, 1024d],
+    :s_ratio => round.(collect(range(0.1, stop=0.8, length=10)); digits = 3),
+    :ρ       => [8, 32],
+    :γ       => [0.0, 0.5]
+)
 
-    println("\n====================== HP 'ρ' ======================")
-    for m in [256, 1024], s_ratio in [0.1, 0.3], γ in [0.1, 0.5]
-        tune_rho(X, y, k, m, s_ratio, γ, seed, best_params)
-        println("-"^40)
-    end
-    
-    println("\n====================== HP 'γ' ======================")
-    for m in [256, 1024], s_ratio in [0.1, 0.3], ρ in [8, 32]
-        tune_gamma(X, y, k, m, s_ratio, ρ, seed, best_params)
-        println("-"^40)
-    end
-    
-    println("\n--- HYPERPARAMETER SEARCH COMPLETED ---")
-    @printf "Best Accuracy: %.4f\n" best_params[:accuracy]
-    println("With the following hyperparameters:")
-    for (key, val) in best_params
-        if key != :accuracy
-            println("  $key = $val")
-        end
-    end
+flynn_grid_ρ = Dict{Symbol, Vector}(
+    :m       => [256d, 1024d],
+    :s_ratio => [0.1, 0.3],
+    :ρ       => unique(round.(Int, exp.(range(log(4), stop=log(256), length=10)))),
+    :γ       => [0.0, 0.5]
+)
 
-    return best_params
-end
+flynn_grid_γ = Dict{Symbol, Vector}(
+    :m       => [256d, 1024d],
+    :s_ratio => [0.1, 0.3],
+    :ρ       => [8, 32],
+    :γ       => vcat([0.0], round.(collect(range(0.1, stop=0.8, length=10)); digits = 3))
+)
+
+best_params_m = grid_search(FlyNN, X, y, k_folds, seed, flynn_grid_m, "data/results_flynn_m.csv")
+best_params_s = grid_search(FlyNN, X, y, k_folds, seed, flynn_grid_s_ratio, "data/results_flynn_s.csv")
+best_params_ρ = grid_search(FlyNN, X, y, k_folds, seed, flynn_grid_ρ, "data/results_flynn_rho.csv")
+best_params_γ = grid_search(FlyNN, X, y, k_folds, seed, flynn_grid_γ, "data/results_flynn_gamma.csv")
+
+all_results = [best_params_m, best_params_s, best_params_ρ, best_params_γ]
+
+best_overall_params = all_results[argmax(d[:accuracy] for d in all_results)]
+
+#-- FINAL SUMMARY --#
+println("\n\nFINAL SUMMARY:")
+println("Best parameters for EaS:", best_eas_params)
+println("Best parameters for FlyNN:", best_overall_params)
