@@ -13,18 +13,18 @@ i.i.d. from the uniform distribution over S^{d-1}.
 # Returns
 - `Matrix{Float64}`: The generated projection matrix.
 """
-function rupm(m::Int, d::Int; seed::Int = 42)
+function rupm(m::Int, d::Int; seed::Int=42)
     rng = MersenneTwister(seed)
     mat = randn(rng, m, d)
-    
+
     # Normalize each row in-place to have unit L2 norm.
     @inbounds for i in 1:m
         # Get a view of the current row to avoid copying data.
         row_view = @view mat[i, :]
-        
+
         # Calculate the norm of the row.
         row_norm = norm(row_view)
-        
+
         # Normalize the row. Add a small epsilon for numerical stability.
         # This prevents division by zero if a row happens to be all zeros.
         mat[i, :] ./= (row_norm + eps(eltype(mat)))
@@ -60,16 +60,15 @@ function fit(::Type{EaS}, X::AbstractMatrix{T}, y::AbstractVector, m::Int, k::In
     class_labels = unique(y)
     l = length(class_labels)
     class_map = Dict(label => i for (i, label) in enumerate(class_labels))
-    
-    # Compute random projection matrix
-    P = rupm(m,d; seed)
 
-    # Determine the computation type based on the element types of X and M.
+    # Compute random projection matrix
+    P = rupm(m, d; seed)
+
+    # Determine the computation type based on the element types of X and P.
     T_proj = promote_type(T, eltype(P))
 
     # Safe parallelization with thread-local storage for weights and counters
-    # We initialize a weight and counter vector for each thread to prevent race conditions.
-    W_local  = [zeros(Int, l, m) for _ in 1:nthreads()]
+    W_local = [zeros(Int, l, m) for _ in 1:nthreads()]
     ct_local = [zeros(Int, m) for _ in 1:nthreads()]
     x_proj_local = [Vector{T_proj}(undef, m) for _ in 1:Threads.nthreads()]
     top_idxs_local = [Vector{Int}(undef, k) for _ in 1:nthreads()]
@@ -77,7 +76,7 @@ function fit(::Type{EaS}, X::AbstractMatrix{T}, y::AbstractVector, m::Int, k::In
 
     @threads for i in 1:n
         tid = threadid()
-        
+
         W = W_local[tid]
         ct = ct_local[tid]
         x_proj = x_proj_local[tid]
@@ -94,15 +93,15 @@ function fit(::Type{EaS}, X::AbstractMatrix{T}, y::AbstractVector, m::Int, k::In
             ct[j] += 1
         end
     end
-    
-    W_total  = reduce(+, W_local)
+
+    W_total = reduce(+, W_local)
     ct_total = reduce(+, ct_local)
-    
+
     W_normalized = zeros(Float64, l, m)
     valid_indices = ct_total .> 0
-   
+
     @inbounds for c in 1:l
-        W_normalized[c, valid_indices] .= W_total[c, valid_indices] ./ ct_total[valid_indices] 
+        W_normalized[c, valid_indices] .= W_total[c, valid_indices] ./ ct_total[valid_indices]
     end
 
     return EaS(P, W_normalized, ct_total, k, class_labels)
@@ -118,7 +117,7 @@ Performs inference on new data using a trained EaS model.
 - `X::AbstractMatrix`: The data matrix (d x n).
 
 # Returns
-- `Vector`: A vector of scores for each column in `X`.
+- `Vector`: A vector of predictions for each column in `X`.
 """
 function predict(model::EaS, X::AbstractMatrix{T}) where T
     n = size(X, 2)
@@ -145,12 +144,12 @@ function predict(model::EaS, X::AbstractMatrix{T}) where T
         x_view = @view X[:, i]
         mul!(x_proj, model.P, x_view)
         _topk_indices!(top_idxs, top_vals, x_proj, model.k)
-        
+
         fill!(class_scores, 0)
         active_weights = @view model.W[:, top_idxs]
-        
+
         sum!(class_scores, active_weights)
-        
+
         winner_idx = argmax(class_scores)
 
         # qui non dovrebbero esserci problemi di race conditions

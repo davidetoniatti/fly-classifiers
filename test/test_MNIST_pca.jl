@@ -3,9 +3,10 @@ using MLDatasets, BenchmarkTools
 using MultivariateStats
 using StatsBase
 
+include("../classification_report.jl")
+
 # Data Preparation
 X_train, y_train = MNIST(split=:train)[:]
-
 X_test, y_test = MNIST(split=:test)[:]
 
 X_train = flatten(X_train)
@@ -32,12 +33,15 @@ m = 50_000 # projection dimensionality
 
 s = 5
 
-ρ = 128
+ρ = floor(Int64, d*log(ℯ,m))
 γ = 0.8
 
-model = FliesClassifiers.fit(FlyNN, X_train,y_train,m,ρ,s,γ,seed)
-y_pred = FliesClassifiers.predict(model, X_test);
+# model = FliesClassifiers.fit(EaS, X_train,y_train,m,ρ,s,γ,seed)
+# y_pred = FliesClassifiers.predict(model, X_test);
 
-#@btime FlyNN.fit(X_train,y_train,m,ρ,s,γ,seed)
-#@profview fit(X_train,y_train,m,ρ,s,γ,seed)
+# model = FliesClassifiers.fit(EaS, X_train, y_train, m, ρ, seed)
+# y_pred = FliesClassifiers.predict(model, X_test);
+
+# @btime FlyNN.fit(X_train,y_train,m,ρ,s,γ,seed)
+# @profview fit(X_train,y_train,m,ρ,s,γ,seed)
 # @btime predict(X_test, model);
