@@ -168,7 +168,7 @@ Trains the FlyNN classifier.
 - `m::Int`: The dimension of the projection space.
 - `ρ::Int`: The number of nonzeros in the FlyHash.
 - `s::Int`: The number of nonzeros per column in the projection matrix.
-- `γ::Real`: The learning rate parameter.
+- `γ::Real`: The decay rate parameter.
 - `seed::Int`: Random seed for reproducibility.
 
 # Returns
@@ -210,9 +210,14 @@ function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, ρ::In
     # Once all threads are finished, we combine their local weight matrices.
     W_counts = reduce(+, W_local)
 
-    # Apply the final weight transformation.
-    λ = log1p(-γ)  # = log(1-γ)
-    W_final = @. exp(λ * float(W_counts))
+    # Apply the final weight transformation with special handling for γ = 0.
+    W_final = if γ == 0
+        # If γ is 0, update weights to 1.0 where are 0, and to 0.0 otherwise.
+        @. float(W_counts == 0)
+    else
+        λ = log1p(-γ)  # = log(1-γ)
+        @. exp(λ * float(W_counts))
+    end
 
     return FlyNN(M, W_final, ρ, class_labels)
 end
