@@ -1,3 +1,5 @@
+import Base: show
+
 """
     sbpm(d::Int, m::Int, s::Int, seed::Int) ->
     SparseMatrixCSC{Bool, Int}
@@ -273,4 +275,28 @@ function predict(model::FlyNN, X::AbstractMatrix)
     end
 
     return y_pred
+end
+
+
+"""
+    show(io::IO, ::MIME"text/plain", model::FlyNN)
+
+Defines the multi-line, pretty-printing for a FlyNN model (rich display).
+"""
+function show(io::IO, ::MIME"text/plain", model::FlyNN)
+    println(io, "FlyNN Classifier")
+    println(io, "├─ Projection (M): $(join(size(model.M), '×')) $(typeof(model.M))")
+    println(io, "├─ Weights (W):    $(join(size(model.W), '×')) $(typeof(model.W))")
+    println(io, "├─ Nonzeros (ρ):  $(model.ρ)")
+    println(io, "└─ Classes:        $(length(model.class_labels)) labels of type $(eltype(model.class_labels))")
+end
+
+"""
+    show(io::IO, model::FlyNN)
+
+Defines the compact, single-line printing for a FlyNN model.
+"""
+function show(io::IO, model::FlyNN)
+    n_classes = length(model.class_labels)
+    print(io, "FlyNN($(n_classes) classes, ρ=$(model.ρ))")
 end

@@ -158,3 +158,28 @@ function predict(model::EaS, X::AbstractMatrix{T}) where T
 
     return y_pred
 end
+
+
+"""
+    show(io::IO, ::MIME"text/plain", model::EaS)
+
+Defines the multi-line, pretty-printing for an EaS model (rich display).
+"""
+function show(io::IO, ::MIME"text/plain", model::EaS)
+    println(io, "EaS Classifier")
+    println(io, "├─ Projection (P): $(join(size(model.P), '×')) $(typeof(model.P))")
+    println(io, "├─ Weights (W):    $(join(size(model.W), '×')) $(typeof(model.W))")
+    println(io, "├─ Activations (k): $(model.k)")
+    println(io, "└─ Classes:        $(length(model.class_labels)) labels of type $(eltype(model.class_labels))")
+end
+
+
+"""
+    show(io::IO, model::EaS)
+
+Defines the compact, single-line printing for an EaS model.
+"""
+function show(io::IO, model::EaS)
+    n_classes = length(model.class_labels)
+    print(io, "EaS($(n_classes) classes, k=$(model.k))")
+end
