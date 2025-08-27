@@ -1,4 +1,4 @@
-name = "FlyNN"
+name = "FliesClassifiers"
 uuid = "87f929f6-1c70-4c8c-9b04-ad225bbb75ed"
 authors = ["Davide Toniatti <davide.toniatti@students.uniroma2.eu>"]
 version = "0.1.0"

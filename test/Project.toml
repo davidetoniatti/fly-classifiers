@@ -1,6 +1,6 @@
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-FlyNN = "87f929f6-1c70-4c8c-9b04-ad225bbb75ed"
+FliesClassifiers = "87f929f6-1c70-4c8c-9b04-ad225bbb75ed"
 MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
 MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
 MultivariateStats = "6f286f6a-111f-5878-ab1e-185364afe411"
