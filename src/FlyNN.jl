@@ -16,7 +16,7 @@ exactly `s` non-zero elements, placed in random rows.
 # Returns
 - `SparseMatrixCSC{Bool, Int}`: The generated sparse binary matrix.
 """
-function sbpm(d::Int, m::Int, s::Int, seed::Int)
+function sbpm(m::Int, d::Int, s::Int, seed::Int)
     # Set random seed.
     Random.seed!(seed)
 
@@ -40,12 +40,12 @@ function sbpm(d::Int, m::Int, s::Int, seed::Int)
         sample!(1:d, idxs; replace=false)
 
         # Fill the row and column index vectors.
-        @inbounds row_idx[start_pos:end_pos] .= idxs
-        @inbounds col_idx[start_pos:end_pos] .= i
+        @inbounds row_idx[start_pos:end_pos] .= i
+        @inbounds col_idx[start_pos:end_pos] .= idxs
     end
 
     # The values are all `true`, so we can construct the sparse matrix directly.
-    return sparse(row_idx, col_idx, true, d, m)
+    return sparse(row_idx, col_idx, true, m, d)
 end
 
 
@@ -67,7 +67,7 @@ projections.
 """
 function fly_hash(X::AbstractMatrix, M::SparseMatrixCSC{Bool,Int}, ρ::Int)
     d_X, n = size(X)
-    d_M, m = size(M)
+    m, d_M = size(M)
 
     @assert d_X == d_M "Dimension mismatch: X has $d_X rows, M has $d_M rows."
 
@@ -95,7 +95,7 @@ function fly_hash(X::AbstractMatrix, M::SparseMatrixCSC{Bool,Int}, ρ::Int)
         top_vals = top_vals_local[tid]
 
         # In-place multiplication: x_proj = M' * X[:, i]
-        manual_mul_transpose!(x_proj, M, X[:, i])
+        manual_mul!(x_proj, M, X[:, i])
 
         # Find the indices of the ρ largest values.
         _topk_indices!(top_idxs, top_vals, x_proj, ρ)
@@ -107,52 +107,52 @@ function fly_hash(X::AbstractMatrix, M::SparseMatrixCSC{Bool,Int}, ρ::Int)
     return sparse(row_idx, col_idx, true, m, n)
 end
 
+
 """
-    manual_mul_transpose!(y, M, x) -> y
+    manual_mul!(y, M, x) -> y
 
-Performs an optimized in-place transposed matrix-vector multiplication `y = M' * x`.
+Performs an efficient, in-place matrix-vector multiplication `y = M * x`.
 
-This function is specifically tailored for cases where `M` is a `SparseMatrixCSC` with
-`Bool` values. It leverages the sparse CSC (Compressed Sparse Column) structure for
-efficient iteration over non-zero elements. Since the matrix values are boolean (effectively 1 for
-non-zero entries), the dot product for each row of `M'` (column of `M`) simplifies to
-a direct sum of the corresponding elements in `x`, avoiding actual multiplications.
+This function is highly optimized for cases where `M` is a `SparseMatrixCSC{Bool, Int}`.
+It leverages the Compressed Sparse Column (CSC) format for fast iteration. For each
+non-zero element at `M[i, j]`, the corresponding value `x[j]` is added to the
+result vector at `y[i]`. This avoids unnecessary multiplications by zero.
 
 # Arguments
-- `y::Vector{T}`: The output vector to store the result. Its length must be equal to the number of columns in `M`.
-- `M::SparseMatrixCSC{Bool, Int}`: The sparse boolean matrix.
-- `x::AbstractVector{T}`: The vector to be multiplied.
+- `y::Vector{T}`: The output vector where the result is stored.
+- `M::SparseMatrixCSC{Bool, Int}`: The sparse projection matrix (`m x d`).
+- `x::AbstractVector{T}`: The input vector of length `d`.
 """
-@inline function manual_mul_transpose!(y::Vector{T}, M::SparseMatrixCSC{Bool,Int}, x::AbstractVector{T}) where T
-    # Extract the internal fields of the sparse matrix for direct and fast access.
+@inline function manual_mul!(y::Vector{T}, M::SparseMatrixCSC{Bool,Int}, x::AbstractVector{T}) where T
+    m, d = size(M)
+
+    @assert length(y) == m "Output vector length must match the number of rows in M."
+    @assert length(x) == d "Input vector length must match the number of columns in M."
+
+    # Initialize the output vector to zero to ensure a clean slate for accumulation.
+    fill!(y, zero(T))
+
     colptr = M.colptr
     rowval = M.rowval
-    n_cols_M = size(M, 2)
 
-    # Ensure the output vector has the correct dimensions before proceeding.
-    @assert length(y) == n_cols_M "Output vector length must match the number of columns in the matrix."
+    # Iterate through each column 'j' of the matrix M.
+    # This is the most efficient way to traverse a CSC matrix.
+    @inbounds for j in 1:d
+        # Get the value from the input vector corresponding to the current column.
+        val_x = x[j]
 
-    # Loop over each 'j' of the matrix M. This corresponds to calculating
-    # the j-th element of the result vector 'y', which is the dot product of
-    # the j-th column of M with the vector x.
-    @inbounds for j in 1:n_cols_M
-        # Initialize an accumulator for the dot product result.
-        sum_val = zero(T)
+        # Iterate through the non-zero elements of column 'j'.
+        # The range `colptr[j]:(colptr[j+1] - 1)` gives the indices in `rowval`
+        # for all non-zero entries in this column.
+        for k in colptr[j]:(colptr[j+1] - 1)
+            # Get the row index 'i' of the current non-zero element.
+            i = rowval[k]
 
-        # Find the range of indices in `rowval` for the non-zero elements in column 'j'.
-        start_idx = colptr[j]
-        end_idx = colptr[j+1] - 1
-
-        # For each non-zero element in the column, add the corresponding value from 'x' to the sum.
-        # Since M is a boolean matrix, the dot product `dot(M[:, j], x)` simplifies
-        # to `sum(x[i] for i in non-zero-rows-of-j)`.
-        @simd ivdep for k in start_idx:end_idx
-            # `rowval[k]` gives the row index of a non-zero element.
-            sum_val += x[rowval[k]]
+            # Accumulate the result: y[i] += M[i, j] * x[j].
+            # Since M is a boolean matrix, M[i, j] is effectively 1,
+            # so we just add x[j] to y[i].
+            y[i] += val_x
         end
-
-        # Store the final sum in the j-th position of the output vector.
-        y[j] = sum_val
     end
 end
 
@@ -188,7 +188,7 @@ function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, ρ::In
     class_map = Dict(label => i for (i, label) in enumerate(class_labels))
 
     # Compute the FlyHash
-    M = sbpm(d, m, s, seed)
+    M = sbpm(m, d, s, seed)
     H = fly_hash(X, M, ρ)
 
     # Safe parallelization with thread-local storage for weights.
