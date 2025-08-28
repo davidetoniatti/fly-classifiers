@@ -11,9 +11,9 @@ abstract type AbstractFliesClassifier end
 A struct to hold the components of a trained FlyNN model.
 """
 struct FlyNN{T} <: AbstractFliesClassifier
-    M::SparseMatrixCSC{Bool,Int}
+    P::SparseMatrixCSC{Bool,Int}
     W::Matrix{Float64}
-    ρ::Int
+    k::Int
     class_labels::Vector{T}
 end
 

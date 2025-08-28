@@ -33,7 +33,7 @@ m = 50_000 # projection dimensionality
 
 s = 5
 
-ρ = floor(Int64, d*log(ℯ,m))
+ρ = 128
 γ = 0.8
 
 # model = FliesClassifiers.fit(EaS, X_train,y_train,m,ρ,s,γ,seed)

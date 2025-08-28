@@ -1,3 +1,5 @@
+import Base: show
+
 """
     rupm(m::Int, d::Int, seed::Int) ->
     Matrix{Float64}
@@ -35,8 +37,8 @@ end
 
 
 """
-    fit(::Type{EaS}, X::AbstractMatrix, y::AbstractVector, m::Int, k::Int,
-    seed::Int) -> EaS
+    fit(::Type{EaS}, X::AbstractMatrix, y::AbstractVector, m::Int, k::Int)
+    -> EaS
 
 Trains the EaS classifier.
 
@@ -46,12 +48,12 @@ Trains the EaS classifier.
 - `y::AbstractVector`: Training labels (n-element vector).
 - `m::Int`: The dimension of the projection space.
 - `k::Int`: The number of active response regions per item.
-- `seed::Int`: Random seed for reproducibility.
+- `seed::Int`: Seed for reproducibility.
 
 # Returns
 - `EaS`: The trained model containing the projection matrix and weights.
 """
-function fit(::Type{EaS}, X::AbstractMatrix{T}, y::AbstractVector, m::Int, k::Int, seed::Int) where T
+function fit(::Type{EaS}, X::AbstractMatrix{T}, y::AbstractVector, m::Int, k::Int; seed::Int=42) where T
     d, n = size(X)
     @assert length(y) == n "Number of labels does not match number of data points."
 

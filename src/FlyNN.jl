@@ -1,22 +1,23 @@
 import Base: show
+import LinearAlgebra: mul!
 
 """
-    sbpm(d::Int, m::Int, s::Int, seed::Int) ->
+    sbpm(m::Int, k::Int, s::Int; seed::Int) ->
     SparseMatrixCSC{Bool, Int}
 
-Creates a sparse binary projection matrix of size `d x m`, where each column has
+Creates a sparse binary projection matrix of size `m x d`, where each column has
 exactly `s` non-zero elements, placed in random rows.
 
 # Arguments
-- `d::Int`: Number of rows.
-- `m::Int`: Number of columns.
+- `m::Int`: Number of rows.
+- `d::Int`: Number of columns.
 - `s::Int`: Number of non-zero elements per columns.
 - `seed::Int`: Seed for initializing the random number generators.
 
 # Returns
 - `SparseMatrixCSC{Bool, Int}`: The generated sparse binary matrix.
 """
-function sbpm(m::Int, d::Int, s::Int, seed::Int)
+function sbpm(m::Int, d::Int, s::Int; seed::Int=42)
     # Set random seed.
     Random.seed!(seed)
 
@@ -50,55 +51,55 @@ end
 
 
 """
-    fly_hash(X::AbstractMatrix, M::SparseMatrixCSC, ρ::Int) ->
+    fly_hash(X::AbstractMatrix, P::SparseMatrixCSC, k::Int) ->
     SparseMatrixCSC{Bool, Int}
 
-Computes the FlyHash of each column of matrix `X`, using the projection matrix `M`.
-For each column, the FlyHash is defined by the indices of the `ρ` largest
+Computes the FlyHash of each column of matrix `X`, using the projection matrix `P`.
+For each column, the FlyHash is defined by the indices of the `k` largest
 projections.
 
 # Arguments
 - `X::AbstractMatrix`: Input matrix (d x n).
-- `M::SparseMatrixCSC`: Random projection matrix (m x d).
-- `ρ::Int`: Number of nonzeros per column (the "top-ρ").
+- `P::SparseMatrixCSC`: Random projection matrix (m x d).
+- `k::Int`: Number of nonzeros per column (the "top-k").
 
 # Returns
 - `SparseMatrixCSC{Bool, Int}`: The sparse FlyHash matrix (m x n).
 """
-function fly_hash(X::AbstractMatrix, M::SparseMatrixCSC{Bool,Int}, ρ::Int)
+function fly_hash(X::AbstractMatrix, P::SparseMatrixCSC{Bool,Int}, k::Int)
     d_X, n = size(X)
-    m, d_M = size(M)
+    m, d_P = size(P)
 
-    @assert d_X == d_M "Dimension mismatch: X has $d_X rows, M has $d_M rows."
+    @assert d_X == d_P "Dimension mismatch: X has $d_X rows, M has $d_P rows."
 
     # Determine the computation type based on the element types of X and M.
-    T = promote_type(eltype(X), eltype(M))
+    T = promote_type(eltype(X), eltype(P))
 
     # Thread-local storage to avoid race conditions and allocations.
     # Each thread gets its own temporary vector `x_proj` for intermediate results.
     x_proj_local = [Vector{T}(undef, m) for _ in 1:Threads.nthreads()]
-    top_idxs_local = [Vector{Int}(undef, ρ) for _ in 1:nthreads()]
-    top_vals_local = [Vector{T}(undef, ρ) for _ in 1:nthreads()]
+    top_idxs_local = [Vector{Int}(undef, k) for _ in 1:nthreads()]
+    top_vals_local = [Vector{T}(undef, k) for _ in 1:nthreads()]
 
-    nnz = n * ρ
+    nnz = n * k
     row_idx = Vector{Int}(undef, nnz)
     col_idx = Vector{Int}(undef, nnz)
 
     @threads for i in 1:n
         tid = threadid()
-        start_pos = (i - 1) * ρ + 1
-        end_pos = i * ρ
+        start_pos = (i - 1) * k + 1
+        end_pos = i * k
 
         # Get the current thread's temporary vector.
         x_proj = x_proj_local[tid]
         top_idxs = top_idxs_local[tid]
         top_vals = top_vals_local[tid]
 
-        # In-place multiplication: x_proj = M' * X[:, i]
-        manual_mul!(x_proj, M, X[:, i])
+        # In-place multiplication
+        mul!(x_proj, P, X[:, i])
 
-        # Find the indices of the ρ largest values.
-        _topk_indices!(top_idxs, top_vals, x_proj, ρ)
+        # Find the indices of the k largest values.
+        _topk_indices!(top_idxs, top_vals, x_proj, k)
 
         @inbounds row_idx[start_pos:end_pos] .= top_idxs
         @inbounds col_idx[start_pos:end_pos] .= i
@@ -109,7 +110,7 @@ end
 
 
 """
-    manual_mul!(y, M, x) -> y
+    mul!(y, M, x) -> y
 
 Performs an efficient, in-place matrix-vector multiplication `y = M * x`.
 
@@ -123,7 +124,7 @@ result vector at `y[i]`. This avoids unnecessary multiplications by zero.
 - `M::SparseMatrixCSC{Bool, Int}`: The sparse projection matrix (`m x d`).
 - `x::AbstractVector{T}`: The input vector of length `d`.
 """
-@inline function manual_mul!(y::Vector{T}, M::SparseMatrixCSC{Bool,Int}, x::AbstractVector{T}) where T
+function mul!(y::Vector{T}, M::SparseMatrixCSC{Bool,Int}, x::AbstractVector{T}) where T
     m, d = size(M)
 
     @assert length(y) == m "Output vector length must match the number of rows in M."
@@ -158,8 +159,8 @@ end
 
 
 """
-    fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, ρ::Int, s::Int,
-    γ::Real, seed::Int) -> FlyNN
+    fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, k::Int, s::Int,
+    γ::Real) -> FlyNN
 
 Trains the FlyNN classifier.
 
@@ -168,16 +169,16 @@ Trains the FlyNN classifier.
 - `X::AbstractMatrix`: Training data matrix (d x n).
 - `y::AbstractVector`: Training labels (n-element vector).
 - `m::Int`: The dimension of the projection space.
-- `ρ::Int`: The number of nonzeros in the FlyHash.
+- `k::Int`: The number of nonzeros in the FlyHash.
 - `s::Int`: The number of nonzeros per column in the projection matrix.
 - `γ::Real`: The decay rate parameter.
-- `seed::Int`: Random seed for reproducibility.
+- `seed::Int`: Seed for reproducibility.
 
 # Returns
 - `FlyNN`: The trained model containing the projection matrix, weights,
 and class map.
 """
-function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, ρ::Int, s::Int, γ::Real, seed::Int)
+function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, k::Int, s::Int, γ::Real; seed::Int=42)
     d, n = size(X)
     @assert length(y) == n "Number of labels does not match number of data points."
 
@@ -188,8 +189,8 @@ function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, ρ::In
     class_map = Dict(label => i for (i, label) in enumerate(class_labels))
 
     # Compute the FlyHash
-    M = sbpm(m, d, s, seed)
-    H = fly_hash(X, M, ρ)
+    M = sbpm(m, d, s; seed)
+    H = fly_hash(X, M, k)
 
     # Safe parallelization with thread-local storage for weights.
     # We initialize a weight matrix for each thread to prevent race conditions.
@@ -202,8 +203,8 @@ function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, ρ::In
         # Directly update weights using sparse indices.
         # We get the non-zero row indices for column `i` of `H` and increment
         # the corresponding weights directly.
-        @inbounds for k in H.colptr[i]:(H.colptr[i+1]-1)
-            r = H.rowval[k]
+        @inbounds for j in H.colptr[i]:(H.colptr[i+1]-1)
+            r = H.rowval[j]
             W_local[tid][class_idx, r] += 1
         end
     end
@@ -221,7 +222,7 @@ function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, ρ::In
         @. exp(λ * float(W_counts))
     end
 
-    return FlyNN(M, W_final, ρ, class_labels)
+    return FlyNN(M, W_final, k, class_labels)
 end
 
 """
@@ -237,7 +238,7 @@ Performs inference on new data using a trained FlyNN model.
 - `Vector`: A vector of predicted labels for each column in `X`.
 """
 function predict(model::FlyNN, X::AbstractMatrix)
-    H = fly_hash(X, model.M, model.ρ)
+    H = fly_hash(X, model.P, model.k)
 
     fX = model.W * H
 
@@ -285,9 +286,9 @@ Defines the multi-line, pretty-printing for a FlyNN model (rich display).
 """
 function show(io::IO, ::MIME"text/plain", model::FlyNN)
     println(io, "FlyNN Classifier")
-    println(io, "├─ Projection (M): $(join(size(model.M), '×')) $(typeof(model.M))")
+    println(io, "├─ Projection (P): $(join(size(model.P), '×')) $(typeof(model.P))")
     println(io, "├─ Weights (W):    $(join(size(model.W), '×')) $(typeof(model.W))")
-    println(io, "├─ Nonzeros (ρ):  $(model.ρ)")
+    println(io, "├─ Nonzeros (k):  $(model.k)")
     println(io, "└─ Classes:        $(length(model.class_labels)) labels of type $(eltype(model.class_labels))")
 end
 
@@ -298,5 +299,5 @@ Defines the compact, single-line printing for a FlyNN model.
 """
 function show(io::IO, model::FlyNN)
     n_classes = length(model.class_labels)
-    print(io, "FlyNN($(n_classes) classes, ρ=$(model.ρ))")
+    print(io, "FlyNN($(n_classes) classes, k=$(model.k))")
 end
