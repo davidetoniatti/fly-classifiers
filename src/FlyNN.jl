@@ -1,57 +1,7 @@
 import Base: show
-import LinearAlgebra: mul!
 
 """
-    sbpm(m::Int, k::Int, s::Int; seed::Int) ->
-    SparseMatrixCSC{Bool, Int}
-
-Creates a sparse binary projection matrix of size `m x d`, where each column has
-exactly `s` non-zero elements, placed in random rows.
-
-# Arguments
-- `m::Int`: Number of rows.
-- `d::Int`: Number of columns.
-- `s::Int`: Number of non-zero elements per columns.
-- `seed::Int`: Seed for initializing the random number generators.
-
-# Returns
-- `SparseMatrixCSC{Bool, Int}`: The generated sparse binary matrix.
-"""
-function sbpm(m::Int, d::Int, s::Int; seed::Int=42)
-    # Set random seed.
-    Random.seed!(seed)
-
-    nnz = m * s
-    row_idx = Vector{Int}(undef, nnz)
-    col_idx = Vector{Int}(undef, nnz)
-
-    # Thread-local storage to avoid race conditions and allocations.
-    # Each thread gets its own temporary vector `buf` for intermediate samplings.
-    buf = [Vector{Int}(undef, s) for _ in 1:nthreads()]
-
-    # Use multithreading to generate rows in parallel.
-    @threads for i in 1:m
-        tid = threadid()
-        start_pos = (i - 1) * s + 1
-        end_pos = i * s
-
-        idxs = buf[tid]
-
-        # Sampling.
-        sample!(1:d, idxs; replace=false)
-
-        # Fill the row and column index vectors.
-        @inbounds row_idx[start_pos:end_pos] .= i
-        @inbounds col_idx[start_pos:end_pos] .= idxs
-    end
-
-    # The values are all `true`, so we can construct the sparse matrix directly.
-    return sparse(row_idx, col_idx, true, m, d)
-end
-
-
-"""
-    fly_hash(X::AbstractMatrix, P::SparseMatrixCSC, k::Int) ->
+    fly_hash(X::AbstractMatrix, P::AbstractProjectionMatrix, k::Int) ->
     SparseMatrixCSC{Bool, Int}
 
 Computes the FlyHash of each column of matrix `X`, using the projection matrix `P`.
@@ -60,20 +10,20 @@ projections.
 
 # Arguments
 - `X::AbstractMatrix`: Input matrix (d x n).
-- `P::SparseMatrixCSC`: Random projection matrix (m x d).
+- `P::AbstractProjectionMatrix`: Random projection matrix (m x d).
 - `k::Int`: Number of nonzeros per column (the "top-k").
 
 # Returns
 - `SparseMatrixCSC{Bool, Int}`: The sparse FlyHash matrix (m x n).
 """
-function fly_hash(X::AbstractMatrix, P::SparseMatrixCSC{Bool,Int}, k::Int)
+function fly_hash(X::AbstractMatrix, P::AbstractProjectionMatrix, k::Int)
     d_X, n = size(X)
     m, d_P = size(P)
 
     @assert d_X == d_P "Dimension mismatch: X has $d_X rows, M has $d_P rows."
 
     # Determine the computation type based on the element types of X and M.
-    T = promote_type(eltype(X), eltype(P))
+    T = promote_type(eltype(X), eltype(P.matrix))
 
     # Thread-local storage to avoid race conditions and allocations.
     # Each thread gets its own temporary vector `x_proj` for intermediate results.
@@ -110,57 +60,8 @@ end
 
 
 """
-    mul!(y, M, x) -> y
-
-Performs an efficient, in-place matrix-vector multiplication `y = M * x`.
-
-This function is highly optimized for cases where `M` is a `SparseMatrixCSC{Bool, Int}`.
-It leverages the Compressed Sparse Column (CSC) format for fast iteration. For each
-non-zero element at `M[i, j]`, the corresponding value `x[j]` is added to the
-result vector at `y[i]`. This avoids unnecessary multiplications by zero.
-
-# Arguments
-- `y::Vector{T}`: The output vector where the result is stored.
-- `M::SparseMatrixCSC{Bool, Int}`: The sparse projection matrix (`m x d`).
-- `x::AbstractVector{T}`: The input vector of length `d`.
-"""
-function mul!(y::Vector{T}, M::SparseMatrixCSC{Bool,Int}, x::AbstractVector{T}) where T
-    m, d = size(M)
-
-    @assert length(y) == m "Output vector length must match the number of rows in M."
-    @assert length(x) == d "Input vector length must match the number of columns in M."
-
-    # Initialize the output vector to zero to ensure a clean slate for accumulation.
-    fill!(y, zero(T))
-
-    colptr = M.colptr
-    rowval = M.rowval
-
-    # Iterate through each column 'j' of the matrix M.
-    # This is the most efficient way to traverse a CSC matrix.
-    @inbounds for j in 1:d
-        # Get the value from the input vector corresponding to the current column.
-        val_x = x[j]
-
-        # Iterate through the non-zero elements of column 'j'.
-        # The range `colptr[j]:(colptr[j+1] - 1)` gives the indices in `rowval`
-        # for all non-zero entries in this column.
-        for k in colptr[j]:(colptr[j+1] - 1)
-            # Get the row index 'i' of the current non-zero element.
-            i = rowval[k]
-
-            # Accumulate the result: y[i] += M[i, j] * x[j].
-            # Since M is a boolean matrix, M[i, j] is effectively 1,
-            # so we just add x[j] to y[i].
-            y[i] += val_x
-        end
-    end
-end
-
-
-"""
-    fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, k::Int, s::Int,
-    γ::Real) -> FlyNN
+    fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, P::AbstractProjectionMatrix,
+    k::Int, γ::Real) -> FlyNN
 
 Trains the FlyNN classifier.
 
@@ -168,18 +69,20 @@ Trains the FlyNN classifier.
 - `::Type{FlyNN}`: The model to be fitted.
 - `X::AbstractMatrix`: Training data matrix (d x n).
 - `y::AbstractVector`: Training labels (n-element vector).
-- `m::Int`: The dimension of the projection space.
+- `P::AbstractProjectionMatrix`: Random projection matrix (m x d).
 - `k::Int`: The number of nonzeros in the FlyHash.
-- `s::Int`: The number of nonzeros per column in the projection matrix.
 - `γ::Real`: The decay rate parameter.
-- `seed::Int`: Seed for reproducibility.
 
 # Returns
 - `FlyNN`: The trained model containing the projection matrix, weights,
 and class map.
 """
-function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, k::Int, s::Int, γ::Real; seed::Int=42)
-    d, n = size(X)
+function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, P::AbstractProjectionMatrix, k::Int, γ::Real)
+    d_X, n = size(X)
+    m, d_P = size(P)
+
+    @assert d_X == d_P "Dimension mismatch: X has $d_X rows, M has $d_P rows."
+
     @assert length(y) == n "Number of labels does not match number of data points."
 
     # Robust mapping of class labels to integer indices (1, 2, ..., l).
@@ -189,8 +92,7 @@ function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, k::Int
     class_map = Dict(label => i for (i, label) in enumerate(class_labels))
 
     # Compute the FlyHash
-    M = sbpm(m, d, s; seed)
-    H = fly_hash(X, M, k)
+    H = fly_hash(X, P, k)
 
     # Safe parallelization with thread-local storage for weights.
     # We initialize a weight matrix for each thread to prevent race conditions.
@@ -222,7 +124,7 @@ function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, m::Int, k::Int
         @. exp(λ * float(W_counts))
     end
 
-    return FlyNN(M, W_final, k, class_labels)
+    return FlyNN(P, W_final, k, class_labels)
 end
 
 """

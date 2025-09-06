@@ -11,7 +11,7 @@ abstract type AbstractFliesClassifier end
 A struct to hold the components of a trained FlyNN model.
 """
 struct FlyNN{T} <: AbstractFliesClassifier
-    P::SparseMatrixCSC{Bool,Int}
+    P::AbstractProjectionMatrix
     W::Matrix{Float64}
     k::Int
     class_labels::Vector{T}
@@ -23,7 +23,7 @@ end
 A struct to hold the components of a trained EaS model.
 """
 struct EaS <: AbstractFliesClassifier
-    P::Matrix{Float64}
+    P::AbstractProjectionMatrix
     W::Matrix{Float64}
     ct::Vector{Int64}
     k::Int
