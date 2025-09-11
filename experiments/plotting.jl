@@ -9,11 +9,12 @@ println("Julia environment for plotting configured successfully.")
 """
 Generates plots to compare model performance (for Vision experiments).
 """
-function generate_vision_plots(df::DataFrame, exp::Int)
+function generate_vision_plots(df::DataFrame, exp::Int, plots_dir::String)
     model_names = names(df)[end-3:end]
     dataset_names = unique(df.DatasetName)
     
-    !isdir("plots/vision") && mkpath("plots/vision")
+    output_dir = joinpath(plots_dir, "vision")
+    !isdir(output_dir) && mkpath(output_dir)
 
     for name in dataset_names
         println("Generating plot for dataset: $name (m=$(exp)d)")
@@ -45,7 +46,7 @@ function generate_vision_plots(df::DataFrame, exp::Int)
             )
         end
         
-        filename = "plots/vision/accuracies_m_$(exp)d_$(name).png"
+        filename = joinpath(output_dir, "accuracies_m_$(exp)d_$(name).png")
         savefig(p, filename)
     end
 end
@@ -54,9 +55,10 @@ end
 """
 Generates scatter plots to compare model performance (for OpenML experiments).
 """
-function generate_scatter_plots(results_df::DataFrame, exp::Int)
+function generate_scatter_plots(results_df::DataFrame, exp::Int, plots_dir::String)
     println("\nCreating scatter plots for m = $(exp)d...")
-    !isdir("plots") && mkpath("plots")
+    output_dir = joinpath(plots_dir, "openml")
+    !isdir(output_dir) && mkpath(output_dir)
 
     if nrow(results_df) < 1
         @warn "Results DataFrame is empty for m=$(exp)d. Skipping plot generation."
@@ -111,7 +113,7 @@ function generate_scatter_plots(results_df::DataFrame, exp::Int)
             markerstrokecolor=:yellow
         )
 
-        filename = "plots/comparison_$(x_col)_vs_$(y_col)_m_$(exp)d.png"
+        filename = joinpath(output_dir, "comparison_$(x_col)_vs_$(y_col)_m_$(exp)d.png")
         savefig(plt, filename)
     end
     println("Scatter plots for m = $(exp)d saved to 'plots/' directory.")
@@ -121,9 +123,8 @@ end
 """
 Generic function to find and process result files.
 """
-function process_result_files(plot_type::String, file_pattern::Regex, plot_function::Function)
+function process_result_files(plot_type::String, file_pattern::Regex, plot_function::Function, results_dir::String, plots_dir::String)
     println("\n--- Generating $plot_type Plots ---")
-    results_dir = "results"
     
     if !isdir(results_dir)
         println("'$results_dir' directory not found. Run experiments first.")
@@ -144,7 +145,7 @@ function process_result_files(plot_type::String, file_pattern::Regex, plot_funct
         exp = parse(Int, match_exp.captures[1])
         filepath = joinpath(results_dir, file)
         df = CSV.read(filepath, DataFrame)
-        plot_function(df, exp)
+        plot_function(df, exp, plots_dir)
     end
     println("\n$plot_type plots generation complete.")
 end
@@ -152,20 +153,25 @@ end
 
 # Script entry point
 function main()
-    if isempty(ARGS) || length(ARGS) > 1 || !(ARGS[1] in ["vision", "openml"])
-        println("Usage: julia $(@__FILE__) [vision|openml]")
-        println("\nAvailable arguments:")
-        println("  vision: Generates plots from vision experiment results.")
-        println("  openml: Generates plots from OpenML experiment results.")
+    if !(1 <= length(ARGS) <= 3) || !(ARGS[1] in ["vision", "openml"])
+        println("Usage: julia $(@__FILE__) [vision|openml] [results_dir] [plots_dir]")
+        println("\nArguments:")
+        println("  [vision|openml]: (Required) The type of plots to generate.")
+        println("  [results_dir]:   (Optional) Directory to read CSV results from. Defaults to '../results'.")
+        println("  [plots_dir]:     (Optional) Directory to save generated plots. Defaults to '../plots'.")
         return
     end
 
     plot_type = ARGS[1]
+    results_dir = length(ARGS) >= 2 ? ARGS[2] : joinpath("..", "results")
+    plots_dir = length(ARGS) >= 3 ? ARGS[3] : joinpath("..", "plots")
+
+    println("Generating $plot_type plots. Reading from: $results_dir, Saving to: $plots_dir")
 
     if plot_type == "vision"
-        process_result_files("Vision", r"accuracies_m_\d+d_vision\.csv", generate_vision_plots)
+        process_result_files("Vision", r"accuracies_m_\d+d_vision\.csv", generate_vision_plots, results_dir, plots_dir)
     elseif plot_type == "openml"
-        process_result_files("OpenML", r"accuracies_m_\d+d_openml\.csv", generate_scatter_plots)
+        process_result_files("OpenML", r"accuracies_m_\d+d_openml\.csv", generate_scatter_plots, results_dir, plots_dir)
     end
 end
 

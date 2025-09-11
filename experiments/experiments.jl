@@ -87,7 +87,7 @@ end
 """
 Runs experiments on a collection of datasets from OpenML.
 """
-function openml_datasets_experiments()
+function openml_datasets_experiments(results_dir::String)
     config = OPENML_CONFIG
 
     dataset_ids = [14, 16, 22, 28, 44, 60, 182, 715, 718, 722, 723, 734, 752, 761,
@@ -140,9 +140,10 @@ function openml_datasets_experiments()
         end
 
         if nrow(results_for_exp) > 0
-            !isdir("results") && mkdir("results")
-            CSV.write("results/accuracies_m_$(exp)d_openml.csv", results_for_exp)
-            println("\nResults for m = $(exp)d saved to 'results/accuracies_m_$(exp)d_openml.csv'")
+            !isdir(results_dir) && mkpath(results_dir)
+            output_path = joinpath(results_dir, "accuracies_m_$(exp)d_openml.csv")
+            CSV.write(output_path, results_for_exp)
+            println("\nResults for m = $(exp)d saved to '$output_path'")
         else
             println("\nNo results obtained for m = $(exp)d.")
         end
@@ -154,7 +155,7 @@ end
 """
 Runs experiments on vision datasets (FashionMNIST, CIFAR10).
 """
-function vision_datasets_experiments()
+function vision_datasets_experiments(results_dir::String)
     config = VISION_CONFIG
 
     datasets_to_process = [
@@ -203,9 +204,10 @@ function vision_datasets_experiments()
         end
 
         if nrow(results_for_exp) > 0
-            !isdir("results") && mkdir("results")
-            CSV.write("results/accuracies_m_$(exp)d_vision.csv", results_for_exp)
-            println("\nResults for m = $(exp)d saved to 'results/accuracies_m_$(exp)d_vision.csv'")
+            !isdir(results_dir) && mkpath(results_dir)
+            output_path = joinpath(results_dir, "accuracies_m_$(exp)d_vision.csv")
+            CSV.write(output_path, results_for_exp)
+            println("\nResults for m = $(exp)d saved to '$output_path'")
         else
             println("\nNo results for m = $(exp)d.")
         end
@@ -216,20 +218,23 @@ end
 
 # Script entry point
 function main()
-    if isempty(ARGS) || length(ARGS) > 1 || !(ARGS[1] in ["vision", "openml"])
-        println("Usage: julia $(@__FILE__) [vision|openml]")
-        println("\nAvailable arguments:")
-        println("  vision: Runs experiments on FashionMNIST and CIFAR10.")
-        println("  openml: Runs experiments on a collection of datasets from OpenML.")
+    if !(1 <= length(ARGS) <= 2) || !(ARGS[1] in ["vision", "openml"])
+        println("Usage: julia $(@__FILE__) [vision|openml] [results_output_dir]")
+        println("\nArguments:")
+        println("  [vision|openml] : (Required) The type of experiment to run.")
+        println("  [results_output_dir]: (Optional) Directory to save CSV results. Defaults to '../results'.")
         return
     end
 
     experiment = ARGS[1]
+    results_dir = length(ARGS) == 2 ? ARGS[2] : joinpath("..", "results")
+
+    println("Starting experiment: $experiment. Results will be saved to: $results_dir")
 
     if experiment == "vision"
-        vision_datasets_experiments()
+        vision_datasets_experiments(results_dir)
     elseif experiment == "openml"
-        openml_datasets_experiments()
+        openml_datasets_experiments(results_dir)
     end
 end
 
