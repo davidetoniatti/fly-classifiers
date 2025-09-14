@@ -18,7 +18,10 @@ Trains the EaS classifier.
 - `EaS`: The trained model containing the projection matrix and weights.
 """
 function fit(::Type{EaS}, X::AbstractMatrix{T}, y::AbstractVector, P::AbstractProjectionMatrix, k::Int) where T
-    d, n = size(X)
+    d_X, n = size(X)
+    m, d_P = size(P)
+
+    @assert d_X == d_P "Dimension mismatch: X has $d_X rows, M has $d_P rows."
     @assert length(y) == n "Number of labels does not match number of data points."
 
     # Robust mapping of class labels to integer indices (1, 2, ..., l).
@@ -28,32 +31,28 @@ function fit(::Type{EaS}, X::AbstractMatrix{T}, y::AbstractVector, P::AbstractPr
     class_map = Dict(label => i for (i, label) in enumerate(class_labels))
 
     # Determine the computation type based on the element types of X and P.
-    T_proj = promote_type(T, eltype(P.matrix))
+    # T_proj = promote_type(T, eltype(P.matrix))
+    # 
+    H = FlyHash(X, P, k).matrix
 
     # Safe parallelization with thread-local storage for weights and counters
     W_local = [zeros(Int, l, m) for _ in 1:nthreads()]
     ct_local = [zeros(Int, m) for _ in 1:nthreads()]
-    x_proj_local = [Vector{T_proj}(undef, m) for _ in 1:Threads.nthreads()]
-    top_idxs_local = [Vector{Int}(undef, k) for _ in 1:nthreads()]
-    top_vals_local = [Vector{T_proj}(undef, k) for _ in 1:nthreads()]
+    
+    
+
+    # x_proj_local = [Vector{T_proj}(undef, m) for _ in 1:nthreads()]
+    # top_idxs_local = [Vector{Int}(undef, k) for _ in 1:nthreads()]
+    # top_vals_local = [Vector{T_proj}(undef, k) for _ in 1:nthreads()]
 
     @threads for i in 1:n
         tid = threadid()
+        class_idx = class_map[@inbounds y[i]]
 
-        W = W_local[tid]
-        ct = ct_local[tid]
-        x_proj = x_proj_local[tid]
-        top_idxs = top_idxs_local[tid]
-        top_vals = top_vals_local[tid]
-
-        x_view = @view X[:, i]
-        mul!(x_proj, P, x_view)
-        _topk_indices!(top_idxs, top_vals, x_proj, k)
-
-        class_idx = class_map[y[i]]
-        @inbounds for j in top_idxs
-            W[class_idx, j] += 1
-            ct[j] += 1
+        @inbounds for j in H.colptr[i]:(H.colptr[i+1]-1)
+            r = H.rowval[j]
+            W_local[tid][class_idx, r] += 1
+            ct_local[tid][r] += 1
         end
     end
 
@@ -91,7 +90,7 @@ function predict(model::EaS, X::AbstractMatrix{T}) where T
 
     T_proj = promote_type(T, eltype(model.P.matrix))
 
-    x_proj_local = [Vector{T_proj}(undef, m) for _ in 1:Threads.nthreads()]
+    x_proj_local = [Vector{T_proj}(undef, m) for _ in 1:nthreads()]
     top_idxs_local = [Vector{Int}(undef, model.k) for _ in 1:nthreads()]
     top_vals_local = [Vector{T_proj}(undef, model.k) for _ in 1:nthreads()]
     class_scores_local = [Vector{eltype(model.W)}(undef, l) for _ in 1:nthreads()]
@@ -107,6 +106,7 @@ function predict(model::EaS, X::AbstractMatrix{T}) where T
         x_view = @view X[:, i]
         mul!(x_proj, model.P, x_view)
         _topk_indices!(top_idxs, top_vals, x_proj, model.k)
+	    # partialsortperm!(top_idxs, x_proj, model.k; rev=true)
 
         fill!(class_scores, 0)
         active_weights = @view model.W[:, top_idxs]

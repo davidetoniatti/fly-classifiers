@@ -1,4 +1,14 @@
 """
+    FlyHash
+
+A struct to hold the components of a FlyHash.
+"""
+struct FlyHash
+    matrix::SparseMatrixCSC{Bool,Int}
+end
+
+
+"""
     AbstractFliesClassifier
 
 Supertype for FlyNN and EaS classifiers.

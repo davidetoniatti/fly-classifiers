@@ -1,4 +1,63 @@
 """
+    FlyHash(X::AbstractMatrix, P::AbstractProjectionMatrix, k::Int) ->
+    FlyHash
+
+Computes the FlyHash of each column of matrix `X`, using the projection matrix `P`.
+For each column, the FlyHash is defined by the indices of the `k` largest
+projections.
+
+# Arguments
+- `X::AbstractMatrix`: Input matrix (d x n).
+- `P::AbstractProjectionMatrix`: Random projection matrix (m x d).
+- `k::Int`: Number of nonzeros per column (the "top-k").
+
+# Returns
+- `SparseMatrixCSC{Bool, Int}`: The sparse FlyHash matrix (m x n).
+"""
+function FlyHash(X::AbstractMatrix, P::AbstractProjectionMatrix, k::Int)
+    d_X, n = size(X)
+    m, d_P = size(P)
+
+    @assert d_X == d_P "Dimension mismatch: X has $d_X rows, M has $d_P rows."
+
+    # Determine the computation type based on the element types of X and M.
+    T = promote_type(eltype(X), eltype(P.matrix))
+
+    # Thread-local storage to avoid race conditions and allocations.
+    # Each thread gets its own temporary vector `x_proj` for intermediate results.
+    x_proj_local = [Vector{T}(undef, m) for _ in 1:Threads.nthreads()]
+    top_idxs_local = [Vector{Int}(undef, k) for _ in 1:nthreads()]
+    top_vals_local = [Vector{T}(undef, k) for _ in 1:nthreads()]
+
+    nnz = n * k
+    row_idx = Vector{Int}(undef, nnz)
+    col_idx = Vector{Int}(undef, nnz)
+
+    @threads for i in 1:n
+        tid = threadid()
+        start_pos = (i - 1) * k + 1
+        end_pos = i * k
+
+        # Get the current thread's temporary vector.
+        x_proj = x_proj_local[tid]
+        top_idxs = top_idxs_local[tid]
+        top_vals = top_vals_local[tid]
+
+        # In-place multiplication
+        mul!(x_proj, P, X[:, i])
+
+        # Find the indices of the k largest values.
+        _topk_indices!(top_idxs, top_vals, x_proj, k)
+        #partialsortperm!(top_idxs, x_proj, k; rev=true)
+
+        @inbounds row_idx[start_pos:end_pos] .= top_idxs
+        @inbounds col_idx[start_pos:end_pos] .= i
+    end
+
+    return FlyHash(sparse(row_idx, col_idx, true, m, n))
+end
+
+"""
     _topk_indices!(top_idxs, top_vals, v, k) -> Vector{Int}
 
 Finds the indices of the `k` largest values in a vector `v` and stores them in `top_idxs`.

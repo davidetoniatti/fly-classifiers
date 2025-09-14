@@ -43,7 +43,6 @@ end
 
 
 function mul!(y, M::RandomUniformProjectionMatrix, x)
-    println("correct")
     mul!(y, M.matrix, x)
     return y
 end

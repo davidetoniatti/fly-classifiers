@@ -1,63 +1,5 @@
 import Base: show
 
-"""
-    fly_hash(X::AbstractMatrix, P::AbstractProjectionMatrix, k::Int) ->
-    SparseMatrixCSC{Bool, Int}
-
-Computes the FlyHash of each column of matrix `X`, using the projection matrix `P`.
-For each column, the FlyHash is defined by the indices of the `k` largest
-projections.
-
-# Arguments
-- `X::AbstractMatrix`: Input matrix (d x n).
-- `P::AbstractProjectionMatrix`: Random projection matrix (m x d).
-- `k::Int`: Number of nonzeros per column (the "top-k").
-
-# Returns
-- `SparseMatrixCSC{Bool, Int}`: The sparse FlyHash matrix (m x n).
-"""
-function fly_hash(X::AbstractMatrix, P::AbstractProjectionMatrix, k::Int)
-    d_X, n = size(X)
-    m, d_P = size(P)
-
-    @assert d_X == d_P "Dimension mismatch: X has $d_X rows, M has $d_P rows."
-
-    # Determine the computation type based on the element types of X and M.
-    T = promote_type(eltype(X), eltype(P.matrix))
-
-    # Thread-local storage to avoid race conditions and allocations.
-    # Each thread gets its own temporary vector `x_proj` for intermediate results.
-    x_proj_local = [Vector{T}(undef, m) for _ in 1:Threads.nthreads()]
-    top_idxs_local = [Vector{Int}(undef, k) for _ in 1:nthreads()]
-    top_vals_local = [Vector{T}(undef, k) for _ in 1:nthreads()]
-
-    nnz = n * k
-    row_idx = Vector{Int}(undef, nnz)
-    col_idx = Vector{Int}(undef, nnz)
-
-    @threads for i in 1:n
-        tid = threadid()
-        start_pos = (i - 1) * k + 1
-        end_pos = i * k
-
-        # Get the current thread's temporary vector.
-        x_proj = x_proj_local[tid]
-        top_idxs = top_idxs_local[tid]
-        top_vals = top_vals_local[tid]
-
-        # In-place multiplication
-        mul!(x_proj, P, X[:, i])
-
-        # Find the indices of the k largest values.
-        _topk_indices!(top_idxs, top_vals, x_proj, k)
-
-        @inbounds row_idx[start_pos:end_pos] .= top_idxs
-        @inbounds col_idx[start_pos:end_pos] .= i
-    end
-
-    return sparse(row_idx, col_idx, true, m, n)
-end
-
 
 """
     fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, P::AbstractProjectionMatrix,
@@ -92,7 +34,7 @@ function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, P::AbstractPro
     class_map = Dict(label => i for (i, label) in enumerate(class_labels))
 
     # Compute the FlyHash
-    H = fly_hash(X, P, k)
+    H = FlyHash(X, P, k).matrix
 
     # Safe parallelization with thread-local storage for weights.
     # We initialize a weight matrix for each thread to prevent race conditions.
@@ -140,7 +82,7 @@ Performs inference on new data using a trained FlyNN model.
 - `Vector`: A vector of predicted labels for each column in `X`.
 """
 function predict(model::FlyNN, X::AbstractMatrix)
-    H = fly_hash(X, model.P, model.k)
+    H = FlyHash(X, model.P, model.k).matrix
 
     fX = model.W * H
 

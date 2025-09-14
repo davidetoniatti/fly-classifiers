@@ -76,7 +76,6 @@ result vector at `y[i]`. This avoids unnecessary multiplications by zero.
 - `x::AbstractVector{T}`: The input vector of length `d`.
 """
 function mul!(y::Vector{T}, P::RandomBinaryProjectionMatrix, x::AbstractVector{T}) where T
-    println("optimized")
     m, d = size(P)
 
     @assert length(y) == m "Output vector length must match the number of rows in M."

@@ -14,12 +14,13 @@ include("projections/RandomUniformProjectionMatrix.jl")
 
 # Files inclusion
 include("types.jl")
-include("utils.jl")
+#include("utils.jl")
+include("FlyHash.jl")
 include("FlyNN.jl")
 include("EaS.jl")
 
 # Export of public types and functions
-export AbstractFliesClassifier, FlyNN, EaS
+export AbstractFliesClassifier, FlyNN, EaS, FlyHash
 export AbstractProjectionMatrix, RandomBinaryProjectionMatrix, RandomUniformProjectionMatrix
 export fit, predict
 
