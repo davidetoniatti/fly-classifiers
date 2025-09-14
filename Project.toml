@@ -10,7 +10,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
-LinearAlgebra = "1.11.0"
-Random = "1.11.0"
-SparseArrays = "1.11.0"
-StatsBase = "0.34.6"
+LinearAlgebra = "1.11"
+Random = "1.11"
+SparseArrays = "1.11"
+StatsBase = "0.34"

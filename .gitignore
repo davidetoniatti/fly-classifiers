@@ -13,5 +13,5 @@ deps/deps.jl
 Thumbs.db
 *~
 .ipynb_checkpoints/
-plots/
-results/
+plots*/
+results*/
