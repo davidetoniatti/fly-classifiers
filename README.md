@@ -43,7 +43,7 @@ This modularity is used to implement and evaluate a family of four distinct clas
 
 The module exposes a simple `fit`/`predict` interface.
 
-```
+```julia
 using Pkg
 Pkg.activate(".")
 Pkg.instantiate()
@@ -82,5 +82,4 @@ println("Predictions: ", y_pred[1:10])
 model_nnm = FliesClassifiers.fit(FlyNNM, X_train, y_train, P_unif, k, γ)
 y_pred_nnm = FliesClassifiers.predict(model_nnm, X_test)
 println("Predictions (FlyNNM): ", y_pred_nnm[1:10])
-
 ```
