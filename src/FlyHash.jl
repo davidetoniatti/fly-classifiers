@@ -24,7 +24,7 @@ function FlyHash(X::AbstractMatrix, P::AbstractProjectionMatrix, k::Int)
     T = promote_type(eltype(X), eltype(P.matrix))
 
     # Thread-local storage to avoid race conditions and allocations.
-    # Each thread gets its own temporary vector `x_proj` for intermediate results.
+    # Each thread gets its own local vector `x_proj` for intermediate results.
     x_proj_local = [Vector{T}(undef, m) for _ in 1:Threads.nthreads()]
     top_idxs_local = [Vector{Int}(undef, k) for _ in 1:nthreads()]
     top_vals_local = [Vector{T}(undef, k) for _ in 1:nthreads()]
@@ -38,7 +38,7 @@ function FlyHash(X::AbstractMatrix, P::AbstractProjectionMatrix, k::Int)
         start_pos = (i - 1) * k + 1
         end_pos = i * k
 
-        # Get the current thread's temporary vector.
+        # Get the current thread's local vector.
         x_proj = x_proj_local[tid]
         top_idxs = top_idxs_local[tid]
         top_vals = top_vals_local[tid]
@@ -102,7 +102,7 @@ is efficient for small `k`. In fact, it is much faster than partialsortperm!.
             # We start the search by assuming the new minimum is the largest possible value.
             min_val_in_topk = typemax(T)
 
-            # Perform a quick linear scan over the small `k`-sized buffer to find the new minimum.
+            # Perform a linear scan over the small `k`-sized buffer to find the new minimum.
             for i in 1:k
                 if top_vals[i] < min_val_in_topk
                     min_val_in_topk = top_vals[i]

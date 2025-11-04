@@ -1,0 +1,6 @@
+[openml]
+exp_values = [8, 16, 32, 64, 128, 256]
+nnz_values = [128.0, 256.0]
+gamma = 0.9
+s_ratio = 0.1
+normalize = true

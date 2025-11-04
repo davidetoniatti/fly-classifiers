@@ -11,16 +11,16 @@ end
 """
     AbstractFliesClassifier
 
-Supertype for FlyNN and EaS classifiers.
+Supertype for FlyNNM and EaS classifiers.
 """
 abstract type AbstractFliesClassifier end
 
 """
-    FlyNN
+    FlyNNM
 
-A struct to hold the components of a trained FlyNN model.
+A struct to hold the components of a trained FlyNNM model.
 """
-struct FlyNN{T} <: AbstractFliesClassifier
+struct FlyNNM{T} <: AbstractFliesClassifier
     P::AbstractProjectionMatrix
     W::Matrix{Float64}
     k::Int
@@ -28,11 +28,11 @@ struct FlyNN{T} <: AbstractFliesClassifier
 end
 
 """
-    EaS
+    FlyNNA
 
-A struct to hold the components of a trained EaS model.
+A struct to hold the components of a trained FlyNNA model.
 """
-struct EaS <: AbstractFliesClassifier
+struct FlyNNA <: AbstractFliesClassifier
     P::AbstractProjectionMatrix
     W::Matrix{Float64}
     ct::Vector{Int64}

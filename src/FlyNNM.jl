@@ -2,13 +2,13 @@ import Base: show
 
 
 """
-    fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, P::AbstractProjectionMatrix,
-    k::Int, γ::Real) -> FlyNN
+    fit(::Type{FlyNNM}, X::AbstractMatrix, y::AbstractVector, P::AbstractProjectionMatrix,
+    k::Int, γ::Real) -> FlyNNM
 
-Trains the FlyNN classifier.
+Trains the FlyNNM classifier.
 
 # Arguments
-- `::Type{FlyNN}`: The model to be fitted.
+- `::Type{FlyNNM}`: The model to be fitted.
 - `X::AbstractMatrix`: Training data matrix (d x n).
 - `y::AbstractVector`: Training labels (n-element vector).
 - `P::AbstractProjectionMatrix`: Random projection matrix (m x d).
@@ -16,10 +16,10 @@ Trains the FlyNN classifier.
 - `γ::Real`: The decay rate parameter.
 
 # Returns
-- `FlyNN`: The trained model containing the projection matrix, weights,
+- `FlyNNM`: The trained model containing the projection matrix, weights,
 and class map.
 """
-function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, P::AbstractProjectionMatrix, k::Int, γ::Real)
+function fit(::Type{FlyNNM}, X::AbstractMatrix, y::AbstractVector, P::AbstractProjectionMatrix, k::Int, γ::Real)
     d_X, n = size(X)
     m, d_P = size(P)
 
@@ -66,22 +66,64 @@ function fit(::Type{FlyNN}, X::AbstractMatrix, y::AbstractVector, P::AbstractPro
         @. exp(λ * float(W_counts))
     end
 
-    return FlyNN(P, W_final, k, class_labels)
+    return FlyNNM(P, W_final, k, class_labels)
 end
 
 """
-    predict(model::FlyNN, X::AbstractMatrix) -> Vector
+    predict(model::FlyNNM, X::AbstractMatrix) -> Vector
 
-Performs inference on new data using a trained FlyNN model.
+Performs inference on new data using a trained FlyNNM model.
+Ties are broken deterministically by selecting the first class with minimum score.
 
 # Arguments
-- `model::FlyNN`: The trained FlyNN model object.
+- `model::FlyNNM`: The trained FlyNNM model object.
 - `X::AbstractMatrix`: The data matrix (d x n).
 
 # Returns
 - `Vector`: A vector of predicted labels for each column in `X`.
 """
-function predict(model::FlyNN, X::AbstractMatrix)
+function predict(model::FlyNNM, X::AbstractMatrix)
+    H = FlyHash(X, model.P, model.k).matrix
+    fX = model.W * H
+    
+    l, n = size(fX)
+    y_pred = Vector{eltype(model.class_labels)}(undef, n)
+    
+    @threads for i in 1:n
+        col = @view fX[:, i]
+        
+        # Find the index of the minimum value (deterministic tie-break)
+        min_val = typemax(eltype(fX))
+        winner_idx = 1
+        
+        @inbounds for j in 1:l
+            val = col[j]
+            if val < min_val
+                min_val = val
+                winner_idx = j
+            end
+        end
+        
+        @inbounds y_pred[i] = model.class_labels[winner_idx]
+    end
+    
+    return y_pred
+end
+
+
+"""
+    predict(model::FlyNNM, X::AbstractMatrix) -> Vector
+
+Performs inference on new data using a trained FlyNNM model.
+
+# Arguments
+- `model::FlyNNM`: The trained FlyNNM model object.
+- `X::AbstractMatrix`: The data matrix (d x n).
+
+# Returns
+- `Vector`: A vector of predicted labels for each column in `X`.
+"""
+function predict_old(model::FlyNNM, X::AbstractMatrix)
     H = FlyHash(X, model.P, model.k).matrix
 
     fX = model.W * H
@@ -124,12 +166,12 @@ end
 
 
 """
-    show(io::IO, ::MIME"text/plain", model::FlyNN)
+    show(io::IO, ::MIME"text/plain", model::FlyNNM)
 
-Defines the multi-line, pretty-printing for a FlyNN model (rich display).
+Defines the multi-line, pretty-printing for a FlyNNM model (rich display).
 """
-function show(io::IO, ::MIME"text/plain", model::FlyNN)
-    println(io, "FlyNN Classifier")
+function show(io::IO, ::MIME"text/plain", model::FlyNNM)
+    println(io, "FlyNNM Classifier")
     println(io, "├─ Projection (P): $(join(size(model.P), '×')) $(typeof(model.P))")
     println(io, "├─ Weights (W):    $(join(size(model.W), '×')) $(typeof(model.W))")
     println(io, "├─ Nonzeros (k):  $(model.k)")
@@ -137,11 +179,11 @@ function show(io::IO, ::MIME"text/plain", model::FlyNN)
 end
 
 """
-    show(io::IO, model::FlyNN)
+    show(io::IO, model::FlyNNM)
 
-Defines the compact, single-line printing for a FlyNN model.
+Defines the compact, single-line printing for a FlyNNM model.
 """
-function show(io::IO, model::FlyNN)
+function show(io::IO, model::FlyNNM)
     n_classes = length(model.class_labels)
-    print(io, "FlyNN($(n_classes) classes, k=$(model.k))")
+    print(io, "FlyNNM($(n_classes) classes, k=$(model.k))")
 end

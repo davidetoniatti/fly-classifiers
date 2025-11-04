@@ -1,5 +1,5 @@
 # Begin module
-module FliesClassifiers
+module FlyClassifiers
 
 # Dependencies
 using LinearAlgebra
@@ -16,11 +16,11 @@ include("projections/RandomUniformProjectionMatrix.jl")
 include("types.jl")
 #include("utils.jl")
 include("FlyHash.jl")
-include("FlyNN.jl")
-include("EaS.jl")
+include("FlyNNM.jl")
+include("FlyNNA.jl")
 
 # Export of public types and functions
-export AbstractFliesClassifier, FlyNN, EaS, FlyHash
+export AbstractFliesClassifier, FlyNNM, FlyNNA, FlyHash
 export AbstractProjectionMatrix, RandomBinaryProjectionMatrix, RandomUniformProjectionMatrix
 export fit, predict
 

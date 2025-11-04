@@ -1,4 +1,4 @@
-using MLUtils: MLUtils, flatten, mapobs, splitobs
+using MLUtils: MLUtils, flatten, mapobs, splitobs, shuffleobs, kfolds
 using MLDatasets, BenchmarkTools
 using MultivariateStats
 using StatsBase
@@ -6,31 +6,43 @@ using OpenML, DataFrames, CategoricalArrays, FliesClassifiers
 
 include("../classification_report.jl")
 
-df = OpenML.load(14) |> DataFrame
+df = OpenML.load(40497) |> DataFrame
 
-target_col_index = findfirst(col -> col isa CategoricalArray, eachcol(df))
+target_col_index = findfirst(col -> eltype(col) <: CategoricalValue, eachcol(df))
 y = df[!, target_col_index]
 X = transpose(Matrix(select(df, Not(target_col_index))))
 
-dt = StatsBase.fit(ZScoreTransform, X, dims=2)
-X = StatsBase.transform(dt, X)
+folds = kfolds(shuffleobs((X, y)), k=5)
 
-# Split train/test (80% - 20%)
-train, test = splitobs((X, y); at = 0.8, shuffle = true)
-X_train, y_train = train
-X_test, y_test = test;
+for (i, (train_data, test_data)) in enumerate(folds)
+    X_train, y_train = train_data
+    X_test, y_test = test_data
+    
+    dt = StatsBase.fit(ZScoreTransform, X_train; dims=2)
+    dt.scale .+= eps()
 
-# Training
-seed = 42
+    X_train = StatsBase.transform(dt, X_train)
+    replace!(X_train, NaN => 0)
 
-d = size(X_train)[1]
-m = 50_000 # projection dimensionality
+    X_test = StatsBase.transform(dt, X_test)
+    replace!(X_test, NaN => 0)
+    println("norm ok")
 
-s = 10
-k = 128
-γ = 0.9
 
-B = RandomBinaryProjectionMatrix(m,d,s;seed)
+    # Training
+    seed = 42
 
-model = FliesClassifiers.fit(FlyNN, X_train, y_train, B, k, γ)
-y_pred = FliesClassifiers.predict(model, X_test);
+    d = size(X_train)[1]
+    m = 8*d # projection dimensionality
+
+    s = max(1, round(Int, 0.1 * d))
+    k = 128
+    γ = 0.9
+
+    P = RandomUniformProjectionMatrix(m,d ;seed)
+
+    model = FliesClassifiers.fit(FlyNN, X_train, y_train, P, k, γ);
+    FliesClassifiers.predict(model, X_test)
+end
+#println("Start benchmark")
+#@elapsed FliesClassifiers.fit(EaS, X_train, y_train, P, k);
