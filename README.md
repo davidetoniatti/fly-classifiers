@@ -51,7 +51,7 @@ Pkg.instantiate()
 using FlyClassifiers
 using LinearAlgebra, Random
 
-# 1. Define data and parameters
+# Define data and parameters
 d = 784  # Original dimension
 n = 1000 # Number of training samples
 m = 8*d  # Projection dimension
@@ -63,15 +63,15 @@ X_train = rand(d, n)
 y_train = rand(1:10, n) # 10 classes
 X_test = rand(d, 100)
 
-# 2. Choose and create a projection matrix
+# Choose and create a projection matrix
 # P = RandomBinaryProjectionMatrix(m, d, s; seed=42)
 P_unif = RandomUniformProjectionMatrix(m, d; seed=42)
 
-# 3. Fit a model (e.g., FlyNNA - Additive Filter)
+# Fit a model (e.g., FlyNNA - Additive Filter)
 println("Training model...")
 model_nna = FliesClassifiers.fit(FlyNNA, X_train, y_train, P_unif, k)
 
-# 4. Predict
+# Predict
 println("Predicting...")
 y_pred = FliesClassifiers.predict(model_nna, X_test)
 
