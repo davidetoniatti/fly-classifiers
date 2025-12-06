@@ -23,8 +23,6 @@ exactly `s` non-zero elements, placed in random columns.
 - `seed::Int`: Seed for initializing the random number generators.
 """
 function RandomBinaryProjectionMatrix(m::Int, d::Int, s::Int; seed::Int=42)
-    # Set random seed.
-    Random.seed!(seed)
 
     nnz = m * s
     row_idx = Vector{Int}(undef, nnz)
@@ -33,6 +31,7 @@ function RandomBinaryProjectionMatrix(m::Int, d::Int, s::Int; seed::Int=42)
     # Thread-local storage to avoid race conditions and allocations.
     # Each thread gets its own temporary vector `buf` for intermediate samplings.
     buf = [Vector{Int}(undef, s) for _ in 1:nthreads()]
+    local_rngs = [Xoshiro(seed + k) for k in 1:nthreads()]
 
     # Use multithreading to generate rows in parallel.
     @threads for i in 1:m
@@ -41,9 +40,10 @@ function RandomBinaryProjectionMatrix(m::Int, d::Int, s::Int; seed::Int=42)
         end_pos = i * s
 
         idxs = buf[tid]
+	rng = local_rngs[tid]
 
         # Sampling.
-        sample!(1:d, idxs; replace=false)
+        sample!(rng, 1:d, idxs; replace=false)
 
         # Fill the row and column index vectors.
         @inbounds row_idx[start_pos:end_pos] .= i
