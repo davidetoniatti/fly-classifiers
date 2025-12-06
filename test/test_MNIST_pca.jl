@@ -2,6 +2,7 @@ using MLUtils: MLUtils, flatten, mapobs, splitobs
 using MLDatasets, BenchmarkTools
 using MultivariateStats, StatsBase
 using FlyClassifiers
+using Random
 
 # Data Preparation
 X, y = MLDatasets.FashionMNIST()[:]
@@ -17,7 +18,7 @@ X = StatsBase.transform(dt, X)
 replace!(X, NaN => 0)
 
 # Split train/test (80% - 20%)
-train, test = splitobs((X, y); at = 0.8, shuffle = true)
+train, test = splitobs((X, y); at = 0.8, shuffle = false)
 X_train, y_train = train
 X_test, y_test = test;
 
@@ -39,8 +40,8 @@ k = 128
 
 accuracy_score(y_true, y_pred) = round(100*mean(y_pred .== y_true); digits=2)
 
-B = RandomBinaryProjectionMatrix(m, d, s)
-U = RandomUniformProjectionMatrix(m, d)
+B = RandomBinaryProjectionMatrix(m, d, s; seed)
+U = RandomUniformProjectionMatrix(m, d; seed)
 
 model1 = FlyClassifiers.fit(FlyNNM, X_train, y_train, B, k, γ)
 model2 = FlyClassifiers.fit(FlyNNM, X_train, y_train, U, k, γ)
