@@ -69,17 +69,17 @@ P_unif = RandomUniformProjectionMatrix(m, d; seed=42)
 
 # Fit a model (e.g., FlyNNA - Additive Filter)
 println("Training model...")
-model_nna = FliesClassifiers.fit(FlyNNA, X_train, y_train, P_unif, k)
+model_nna = FlyClassifiers.fit(FlyNNA, X_train, y_train, P_unif, k)
 
 # Predict
 println("Predicting...")
-y_pred = FliesClassifiers.predict(model_nna, X_test)
+y_pred = FlyClassifiers.predict(model_nna, X_test)
 
 println("Predictions: ", y_pred[1:10])
 
 # --- Example with FlyNNM (Multiplicative Filter) ---
 γ = 0.9 # Decay rate
-model_nnm = FliesClassifiers.fit(FlyNNM, X_train, y_train, P_unif, k, γ)
-y_pred_nnm = FliesClassifiers.predict(model_nnm, X_test)
+model_nnm = FlyClassifiers.fit(FlyNNM, X_train, y_train, P_unif, k, γ)
+y_pred_nnm = FlyClassifiers.predict(model_nnm, X_test)
 println("Predictions (FlyNNM): ", y_pred_nnm[1:10])
 ```

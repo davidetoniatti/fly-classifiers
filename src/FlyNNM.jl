@@ -111,59 +111,6 @@ function predict(model::FlyNNM, X::AbstractMatrix)
 end
 
 
-"""
-    predict(model::FlyNNM, X::AbstractMatrix) -> Vector
-
-Performs inference on new data using a trained FlyNNM model.
-
-# Arguments
-- `model::FlyNNM`: The trained FlyNNM model object.
-- `X::AbstractMatrix`: The data matrix (d x n).
-
-# Returns
-- `Vector`: A vector of predicted labels for each column in `X`.
-"""
-function predict_old(model::FlyNNM, X::AbstractMatrix)
-    H = FlyHash(X, model.P, model.k).matrix
-
-    fX = model.W * H
-
-    l, n = size(fX)
-    y_pred = Vector{eltype(model.class_labels)}(undef, n)
-    nties = 0
-
-    winner_buf = Vector{Int}(undef, l)
-
-    @inbounds for i in 1:n
-        min_val = typemax(eltype(fX))
-        win_count = 0
-
-        for j in 1:l
-            val = fX[j, i]
-            if val < min_val
-                min_val = val
-                win_count = 1
-                winner_buf[1] = j
-            elseif val == min_val
-                win_count += 1
-                winner_buf[win_count] = j
-            end
-        end
-
-        # Tie-break
-        winner_label = if win_count > 1
-            nties += 1
-            model.class_labels[winner_buf[rand(1:win_count)]]
-        else
-            model.class_labels[winner_buf[1]]
-        end
-
-        y_pred[i] = winner_label
-    end
-
-    return y_pred
-end
-
 
 """
     show(io::IO, ::MIME"text/plain", model::FlyNNM)

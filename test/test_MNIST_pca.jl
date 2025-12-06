@@ -1,14 +1,12 @@
 using MLUtils: MLUtils, flatten, mapobs, splitobs
 using MLDatasets, BenchmarkTools
 using MultivariateStats, StatsBase
-using Revise, FliesClassifiers
-
-include("../classification_report.jl")
+using FlyClassifiers
 
 # Data Preparation
 X, y = MLDatasets.FashionMNIST()[:]
 X = MLUtils.flatten(X)
-        
+
 mask = map(y -> y in [2,5], y)
 X = X[:, mask]
 y = y[mask]
@@ -39,25 +37,24 @@ s = 5
 k = 128
 γ = 0.9
 
+accuracy_score(y_true, y_pred) = round(100*mean(y_pred .== y_true); digits=2)
+
 B = RandomBinaryProjectionMatrix(m, d, s)
 U = RandomUniformProjectionMatrix(m, d)
 
-# model1 = FliesClassifiers.fit(FlyNN, X_train, y_train, B, k, γ)
-# model2 = FliesClassifiers.fit(FlyNN, X_train, y_train, U, k, γ)
-# model3 = FliesClassifiers.fit(EaS, X_train, y_train, U, k)
-# model4 = FliesClassifiers.fit(EaS, X_train, y_train, B, k)
-# 
-# y_pred = FliesClassifiers.predict(model1, X_test)
-# classification_report(y_test, y_pred)
-# 
-# y_pred = FliesClassifiers.predict(model2, X_test)
-# classification_report(y_test, y_pred)
-# 
-# y_pred = FliesClassifiers.predict(model3, X_test)
-# classification_report(y_test, y_pred)
-# 
-# y_pred = FliesClassifiers.predict(model4, X_test)
-# classification_report(y_test, y_pred)
-# 
+model1 = FlyClassifiers.fit(FlyNNM, X_train, y_train, B, k, γ)
+model2 = FlyClassifiers.fit(FlyNNM, X_train, y_train, U, k, γ)
+model3 = FlyClassifiers.fit(FlyNNA, X_train, y_train, U, k)
+model4 = FlyClassifiers.fit(FlyNNA, X_train, y_train, B, k)
 
-@btime FliesClassifiers.fit(FlyNN, X_train, y_train, U, k, γ)
+y_pred = FlyClassifiers.predict(model1, X_test)
+println(accuracy_score(y_test, y_pred))
+
+y_pred = FlyClassifiers.predict(model2, X_test)
+println(accuracy_score(y_test, y_pred))
+
+y_pred = FlyClassifiers.predict(model3, X_test)
+println(accuracy_score(y_test, y_pred))
+
+y_pred = FlyClassifiers.predict(model4, X_test)
+println(accuracy_score(y_test, y_pred))

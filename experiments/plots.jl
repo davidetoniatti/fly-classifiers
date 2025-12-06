@@ -6,58 +6,6 @@ using LaTeXStrings
 
 println("Julia environment for plotting configured successfully.")
 
-function generate_bar_plots_comparing(ma1, ma2, exp, plots_dir)
-    model_names = ["FlyNN-M Binary", "FlyNN-M Uniform", "FlyNN-A Binary", "FlyNN-A Uniform"]
-    label_values1 = round.(ma1, digits=4)
-    label_values2 = round.(ma2, digits=4)
-    
-    mean_accuracy = Vector{Float64}(undef, lenght(ma1)*2)
-    
-    for i in eachindex(ma1) 
-        mean_accuracy[i] = ma1[i]
-        mean_accuracy[i+1] = ma2[i]
-    end
-    
-    colors = [mod(i, 2) == 1 ? :blue : :orange for i in 1:n_models]
-
-    plot_obj = bar(
-        replace.(model_names,"_" => " "),
-        mean_accuracy,
-        legend = :topright,       # <--- Modificato: attiva la legenda
-        label = "",               # <--- Aggiunto: nasconde la label della serie principale
-        color = colors,           # <--- Aggiunto: applica i colori alternati
-        xlabel = "model",
-        ylabel = "accuracy (mean)",
-        xrotation = 15,
-        size = (800, 600),
-        series_annotations = text.(label_values, :top, :center, 10)
-    )
-    # <--- Aggiunto: Aggiunta di serie fittizie per la legenda ---
-    # Usiamo plot! per aggiungere al grafico esistente.
-    # Plottiamo un punto NaN (invisibile) solo per creare la voce di legenda.
-    
-    # !! SOSTITUISCI QUESTE ETICHETTE CON IL LORO VERO SIGNIFICATO !!
-    plot!(plot_obj, [NaN], # Dati fittizi (invisibili)
-        label = "Significato Colore Blu",  # <-- CAMBIA QUESTA LABEL
-        color = :blue,
-        marker = (:square, 8) # Mostra un quadrato nella legenda
-    )
-    plot!(plot_obj, [NaN], # Dati fittizi (invisibili)
-        label = "Significato Colore Arancione", # <-- CAMBIA QUESTA LABEL
-        color = :orange,
-        marker = (:square, 8)
-    )
-    # -------------------------------------------------------------
-
-    ylims!(plot_obj, (0, maximum(mean_accuracy) * 1.15))
-
-    filename = joinpath(plots_dir, "comparison_models_m_$(exp)d.png")
-    savefig(plot_obj, filename)
-
-    # <--- Modificato: Corretto "Scatter plots" in "Bar plot"
-    println("Bar plot for m = $(exp)d saved to '$(plots_dir)/' directory.")
-end
-
 function generate_bar_plots(df::DataFrame, exp::Int, plots_dir::String)
     !isdir(plots_dir) && mkpath(plots_dir)
 

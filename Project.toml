@@ -1,7 +1,7 @@
-name = "FliesClassifiers"
+name = "FlyClassifiers"
 uuid = "87f929f6-1c70-4c8c-9b04-ad225bbb75ed"
-authors = ["Davide Toniatti <davide.toniatti@students.uniroma2.eu>"]
 version = "0.1.0"
+authors = ["Davide Toniatti <davide.toniatti@students.uniroma2.eu>"]
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -10,7 +10,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
-LinearAlgebra = "1.11"
-Random = "1.11"
-SparseArrays = "1.11"
-StatsBase = "0.34"
+LinearAlgebra = "1.12.0"
+Random = "1.11.0"
+SparseArrays = "1.12.0"
+StatsBase = "0.34.9"
